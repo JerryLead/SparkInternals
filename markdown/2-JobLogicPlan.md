@@ -201,7 +201,13 @@ coalesce() 的核心问题是如何确立 CoalescedRDD 中 partition 和 parent 
 等价于 coalesce(numPartitions, shuffle = true)
 
 ## Primitive transformation
-CombineByKey()
+**combineByKey()**
+
+分析了这么多 RDD 的逻辑执行图，它们之间有没有共同之处？如果有，是怎么被设计和实现的？
+
+仔细分析 RDD 的逻辑执行图会发现，ShuffleDependency 左边的 RDD 中的 record 要求是 \<key, value\> 型的，经过 ShuffleDependency 后，包含相同 key 的 records 会被 aggregate 到一起，然后在 aggregated 的 records 上执行不同的计算逻辑。实际执行时（后面的章节会具体谈到），很多 transformation() 如 groupByKey，reduceByKey 是边 aggregate 数据边执行计算逻辑的，因此共同之处就是 **aggregate 同时 compute**。Spark 使用 combineByKey() 来实现这个 aggregate + compute 的基础操作。
+
+combineByKey() 的定义如下：
 ```scala
  def combineByKey[C](createCombiner: V => C,
       mergeValue: (C, V) => C,
@@ -210,6 +216,10 @@ CombineByKey()
       mapSideCombine: Boolean = true,
       serializer: Serializer = null): RDD[(K, C)]
 ```
+其中主要有三个参数 createCombiner，mergeValue 和 mergeCombiners。简单解释下这三个函数及 combineByKey() 的意义，注意它们的类型：
+
+假设一组具有相同 K 的 \<K, V\> records 正在一个个流向 combineByKey()，createCombiner 将第一个 record 的 value 初始化为 c （比如，c = value），然后从第二个 record 开始，来一个 record 就使用 mergeValue(c, record.value) 来更新 c，比如想要对这些 records 的所有 values 做 sum，那么使用 c = c + record.value。等到 records 全部被 mergeValue()，得到结果 c。假设还有一组 records（key 与前面那组的 key 均相同）一个个到来，combineByKey() 使用前面的方法不断计算得到 c'。现在如果要求这两组 records 总的 combineByKey() 后的结果，那么可以使用 final c = mergeCombiners(c, c') 来计算。
+
 ## 小结
 至此，我们讨论了如何生成 job 的逻辑执行图，这些图也是 Spark 看似简单的 API 背后的复杂计算逻辑及数据依赖关系。
 
