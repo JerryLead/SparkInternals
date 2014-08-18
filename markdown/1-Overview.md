@@ -107,7 +107,7 @@ MappedValuesRDD[4] at groupByKey at GroupByTest.scala:51 (36 partitions)
 ``` 
 
 用图表示就是：
-![deploy](https://raw.githubusercontent.com/JerryLead/SparkInternals/master/markdown/PNGfigures/jobRDD.png)
+![deploy](https://raw.githubusercontent.com/JerryLead/SparkInternals/master/markdown/PNGfigures/JobRDD.png)
 
 > 需要注意的是 data in the partition 展示的是每个 partition 应该得到的计算结果，并不意味着这些结果都同时存在于内存中。
 
