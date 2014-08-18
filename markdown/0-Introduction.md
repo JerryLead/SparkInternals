@@ -1,30 +1,42 @@
 # Spark Internals
 
-Spark Version: 1.0.0  
-Doc Version: 1.0.0.0
+Spark Version: 1.0.2  
+Doc Version: 1.0.2.0
 
 ## Authors
- [@JerryLead](http://weibo.com/jerrylead) - Lijie Xu - 2014年7月10日 
-
+| Weibo Id | Name | 
+|:-----------|:-------------|
+|[@JerryLead](http://weibo.com/jerrylead) | Lijie Xu | 
 
 ## Introduction
-本文主要讨论 Apache Spark 的设计与实现，重点关注其内部架构，附带讨论与其他 Big data system 如 Hadoop MapReduce 设计与实现的区别。请不要将此文档称之为“源码分析”，因为该文档不仅仅解读实现代码，还会讨论大数据分布式处理系统的设计思想、性能、可靠性方面的问题。
 
-讨论系统的设计与实现有很多方法，本文选择`问题驱动` 的方式，一开始引入问题，然后分问题逐步深入。从一个典型的 job 例子入手，逐渐讨论 job 生成及执行过程中所需要的系统功能支持，然后有选择地深入讨论这些功能的设计与实现。也许这样的方式比一开始就分模块讨论更显得有主线。
+本文主要讨论 Apache Spark 的设计与实现，重点关注其设计思想、运行原理、实现架构及性能调优，附带讨论与 Hadoop MapReduce 在设计与实现上的区别。不喜欢将该文档称之为“源码分析”，因为本文的主要目的不是去解读实现代码，而是尽量有逻辑地，从设计与实现原理的角度，来理解 job 从产生到执行完成的整个过程，进而去理解整个系统。
 
-本文档并不是面向 Spark 的普通用户，而是面向希望对 Spark 设计与实现机制，以及大数据分布式处理系统深入了解的 Geeks。
+讨论系统的设计与实现有很多方法，本文选择 **问题驱动** 的方式，一开始引入问题，然后分问题逐步深入。从一个典型的 job 例子入手，逐渐讨论 job 生成及执行过程中所需要的系统功能支持，然后有选择地深入讨论一些功能模块的设计原理与实现方式。也许这样的方式比一开始就分模块讨论更有主线。
+
+本文档面向的是希望对 Spark 设计与实现机制，以及大数据分布式处理框架深入了解的 Geeks。
 
 因为 Spark 社区很活跃，更新速度很快，本文档也会尽量保持同步，文档号的命名与 Spark 版本一致，只是多了一位，最后一位表示文档的版本号。
 
-该文档目前由 JerryLead 撰写，由于实验条件、经验、技术水平等限制，当前只讨论 standalone 版本中的核心功能，而不是全部功能。诚邀各位小伙伴们加入进来，丰富和完善文档。
+由于技术水平、实验条件、经验等限制，当前只讨论 Spark core standalone 版本中的核心功能，而不是全部功能。诚邀各位小伙伴们加入进来，丰富和完善文档。
+
+关于学术方面的一些讨论可以参阅相关的论文以及 Matei 的博士论文，也可以看看我之前写的这篇 [blog](http://www.cnblogs.com/jerrylead/archive/2013/04/27/Spark.html)。
+
+好久没有写这么完整的文档了，上次写还是三年前在学 Ng 的 ML 课程的时候，当年好有激情啊。这次的撰写花了 20+ days，从暑假写到现在，大部分时间花在 debug、画图和琢磨怎么写上，希望文档能对大家和自己都有所帮助。
+
 
 ## Contents
-本文档首先讨论 job 如何执行，然后讨论与 job 执行相关的一些数据存储、通信、调度等内容。具体内容如下：
+本文档首先讨论 job 如何生成，然后讨论怎么执行，最后讨论系统相关的功能特性。具体内容如下：
 
-1. 基本架构
-2. Job 与 task 的执行
-3. 数据存储
-4. Job 与 task 调度
-5. 性能分析
-6. 可靠性分析
+1. [Overview](https://github.com/JerryLead/SparkInternals/blob/master/markdown/1-Overview.md) 总体介绍
+2. [Job logic plan](https://github.com/JerryLead/SparkInternals/blob/master/markdown/2-JobLogicPlan.md) 介绍 job 的逻辑执行图（数据依赖图）
+3. [Job physical plan](https://github.com/JerryLead/SparkInternals/blob/master/markdown/3-JobPhysicalPlan.md) 介绍 job 的物理执行图
+4. [Shuffle details](https://github.com/JerryLead/SparkInternals/blob/master/markdown/4-shuffleDetails.md) 介绍 shuffle 过程
+5. [Architecture](https://github.com/JerryLead/SparkInternals/blob/master/markdown/5-Architecture.md) 介绍系统模块如何协调完成整个 job 的执行
+6. [Cache and Checkpoint](https://github.com/JerryLead/SparkInternals/blob/master/markdown/6-CacheAndCheckpoint.md)  介绍 cache 和 checkpoint 功能
+7. [Broadcast](https://github.com/JerryLead/SparkInternals/blob/master/markdown/7-Broadcast.md) 介绍 broadcast 功能
+8. Job Scheduling 尚未撰写
+9. Fault-tolerance 尚未撰写
 
+## Examples
+写文档期间为了 debug 系统，自己设计了一些 examples，放在了 [SparkLearning/src/internals](https://github.com/JerryLead/SparkLearning/tree/master/src) 下。
