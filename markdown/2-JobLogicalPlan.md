@@ -180,7 +180,7 @@ sortByKey() 将 RDD[(K, V)] 中的 records 按 key 排序，ascending = true 表
 
 **8) cartesian(otherRDD)**
 
-![cartesian](PNGfigures/cartesian.png)
+![cartesian](PNGfigures/Cartesian.png)
 
 Cartesian 对两个 RDD 做笛卡尔集，生成的 CartesianRDD 中 partition 个数 = partitionNum(RDD a) * partitionNum(RDD b)。
 
