@@ -2,7 +2,7 @@
 拿到系统后，部署系统是第一件事，那么系统部署成功以后，各个节点都启动了哪些服务？
 
 ## 部署图
-![deploy](https://raw.githubusercontent.com/JerryLead/SparkInternals/master/markdown/PNGfigures/deploy.png)
+![deploy](PNGfigures/deploy.png)
 
 从部署图中可以看到
 - 整个集群分为 Master 节点和 Worker 节点，相当于 Hadoop 的 Master 和 Slave 节点。
@@ -80,7 +80,7 @@ object GroupByTest {
 
 ```
 阅读代码后，用户头脑中 job 的执行流程是这样的：
-![deploy](https://raw.githubusercontent.com/JerryLead/SparkInternals/master/markdown/PNGfigures/UserView.png)
+![deploy](PNGfigures/UserView.png)
 
 具体流程：
 
@@ -109,7 +109,7 @@ MappedValuesRDD[4] at groupByKey at GroupByTest.scala:51 (36 partitions)
 ``` 
 
 用图表示就是：
-![deploy](https://raw.githubusercontent.com/JerryLead/SparkInternals/master/markdown/PNGfigures/JobRDD.png)
+![deploy](PNGfigures/JobRDD.png)
 
 > 需要注意的是 data in the partition 展示的是每个 partition 应该得到的计算结果，并不意味着这些结果都同时存在于内存中。
 
@@ -131,7 +131,7 @@ MappedValuesRDD[4] at groupByKey at GroupByTest.scala:51 (36 partitions)
 逻辑执行图表示的是数据上的依赖关系，不是 task 的执行图。在 Hadoop 中，用户直接面对 task，mapper 和 reducer 的职责分明：一个进行分块处理，一个进行 aggregate。Hadoop 中 整个数据流是固定的，只需要填充 map() 和 reduce() 函数即可。Spark 面对的是更复杂的数据处理流程，数据依赖更加灵活，很难将数据流和物理 task 简单地统一在一起。因此 Spark 将数据流和具体 task 的执行流程分开，并设计算法将逻辑执行图转换成 task 物理执行图，转换算法后面的章节讨论。
 
 针对这个 job，我们先画出它的物理执行 DAG 图如下：
-![deploy](https://raw.githubusercontent.com/JerryLead/SparkInternals/master/markdown/PNGfigures/PhysicalView.png)
+![deploy](PNGfigures/PhysicalView.png)
 
 可以看到 application 产生了两个 job，第一个 job 由第一个 action（也就是 `pairs1.count`）触发产生，分析一下第一个 job：
 

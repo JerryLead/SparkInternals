@@ -29,7 +29,7 @@ Doc Version: 1.0.2.0
 本文档首先讨论 job 如何生成，然后讨论怎么执行，最后讨论系统相关的功能特性。具体内容如下：
 
 1. [Overview](https://github.com/JerryLead/SparkInternals/blob/master/markdown/1-Overview.md) 总体介绍
-2. [Job logic plan](https://github.com/JerryLead/SparkInternals/blob/master/markdown/2-JobLogicPlan.md) 介绍 job 的逻辑执行图（数据依赖图）
+2. [Job logical plan](https://github.com/JerryLead/SparkInternals/blob/master/markdown/2-JobLogicalPlan.md) 介绍 job 的逻辑执行图（数据依赖图）
 3. [Job physical plan](https://github.com/JerryLead/SparkInternals/blob/master/markdown/3-JobPhysicalPlan.md) 介绍 job 的物理执行图
 4. [Shuffle details](https://github.com/JerryLead/SparkInternals/blob/master/markdown/4-shuffleDetails.md) 介绍 shuffle 过程
 5. [Architecture](https://github.com/JerryLead/SparkInternals/blob/master/markdown/5-Architecture.md) 介绍系统模块如何协调完成整个 job 的执行
