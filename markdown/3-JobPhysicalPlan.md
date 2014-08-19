@@ -6,7 +6,7 @@
 
 ## 一个复杂 job 的逻辑执行图
 
-![ComplexJob](figures/ComplexJob.pdf)
+![ComplexJob](PNGfigures/ComplexJob.png)
 
 代码贴在本章最后。给定这样一个复杂数据依赖图，如何合理划分 stage，并确定 task 的类型和个数？
 
@@ -14,7 +14,7 @@
 
 仔细观察一下逻辑执行图会发现：在每个 RDD 中，每个 partition 是独立的，也就是说在 RDD 内部，每个 partition 的数据依赖各自不会相互干扰。因此，一个大胆的想法是将整个流程图看成一个 stage，为最后一个 finalRDD 中的每个 partition 分配一个 task。图示如下：
 
-![ComplexTask](figures/ComplexTask.pdf)
+![ComplexTask](PNGfigures/ComplexTask.png)
 
 所有的粗箭头组合成第一个 task，该 task 计算结束后顺便将 CoGroupedRDD 中已经计算得到的第二个和第三个 partition 存起来。之后第二个 task（细实线）只需计算两步，第三个 task（细虚线）也只需要计算两步，最后得到结果。
 
@@ -52,7 +52,7 @@
 
 回到 ComplexJob 的物理执行图，如果按照 MapReduce 的逻辑，从前到后执行，map() 产生中间数据 map outpus，经过 partition 后放到本地磁盘。再经过 shuffle-sort-aggregate 后生成 reduce inputs，最后 reduce() 执行得到 result。执行流程如下：
 
-![MapReduce](figures/MapReduce.pdf)
+![MapReduce](PNGfigures/MapReduce.png)
 
 整个执行流程没有问题，但不能直接套用在 Spark 的物理执行图上，因为 MapReduce 的流程图简单、固定，而且没有 pipeline。
 
