@@ -16,14 +16,14 @@
 了解了 Job 的逻辑执行图后，写程序时候会在脑中形成类似上面的数据依赖图。然而，实际生成的 RDD 个数往往比我们想想的个数多。
 
 要解决逻辑执行图生成问题，实际需要解决：
-- 如何产生 RDD，产生哪些 RDD？
+- 如何产生 RDD，应该产生哪些 RDD？
 - 如何建立 RDD 之间的依赖关系？
 
-### 1. 如何产生 RDD，产生哪些 RDD？
+### ==1. 如何产生 RDD，应该产生哪些 RDD？==
 
 解决这个问题的初步想法是让每一个 transformation() 方法返回（new）一个 RDD。事实也基本如此，只是某些 transformation() 比较复杂，会包含多个子 transformation()，因而会生成多个 RDD。这就是*实际 RDD 个数比我们想象的多一些* 的原因。
 
-如何计算每个 RDD 中的数据？逻辑执行图实际上是 computing chain，那么 transformation() 的计算逻辑在哪里被 perform？每个 RDD 里有 compute() 方法，负责接收来自上一个 RDD 或者数据源的 input records，perfrom transformation() 的计算逻辑，然后输出 records。
+==如何计算每个 RDD 中的数据？==逻辑执行图实际上是 computing chain，那么 transformation() 的计算逻辑在哪里被 perform？每个 RDD 里有 compute() 方法，负责接收来自上一个 RDD 或者数据源的 input records，perfrom transformation() 的计算逻辑，然后输出 records。
 
 产生哪些 RDD 与 transformation() 的计算逻辑有关，下面讨论一些典型的 [transformation()](http://spark.apache.org/docs/latest/programming-guide.html#transformations) 及其创建的 RDD。官网上已经解释了每个 transformation 的含义。iterator(split) 的意思是 foreach record in the partition。这里空了很多，是因为那些 transformation() 较为复杂，会产生多个 RDD，具体会在下一节图示出来。
 
@@ -50,21 +50,21 @@
 
 
 
-### 2. 如何建立 RDD 之间的联系？
+### ==2. 如何建立 RDD 之间的联系？==
 
 RDD 之间的数据依赖问题实际包括三部分：
 
-- RDD 本身的依赖关系。要生成的 RDD（以后用 RDD x 表示）是依赖一个 parent RDD，还是多个 parent RDDs？
-- RDD x 中会有多少个 partition ？
-- RDD x 与其 parent RDDs 中 partition 之间是什么依赖关系？是依赖 parent RDD 中一个还是多个 partition？
+- RDD 本身的依赖关系。==要生成的 RDD（以后用 RDD x 表示）是依赖一个 parent RDD，还是多个 parent RDDs？==
+- ==RDD x 中会有多少个 partition ？==
+- ==RDD x 与其 parent RDDs 中 partition 之间是什么依赖关系？是依赖 parent RDD 中一个还是多个 partition？==
 
 第一个问题可以很自然的解决，比如`x = rdda.transformation(rddb)` (e.g., x = a.join(b)) 就表示 RDD x 同时依赖于 RDD a 和 RDD b。
 
 第二个问题中的 partition 个数一般由用户指定，不指定的话一般取`max(parent RDD 1, .., parent RDD n)`。
 
-第三个问题比较复杂。需要考虑这个 transformation() 的语义，不同的 transformation() 的依赖关系不同。比如 map() 是 1:1，而 groupByKey() 中每个 partition 依赖于 parent RDD 中所有的 partition，还有更复杂的情况。
+第三个问题比较复杂。需要考虑这个 transformation() 的语义，不同的 transformation() 的依赖关系不同。比如 map() 是 1:1，而 groupByKey() 逻辑执行图中的 ShuffledRDD 中的每个 partition 依赖于 parent RDD 中所有的 partition，还有更复杂的情况。
 
-再次考虑第三个问题，RDD x 中每个 partition 可以依赖于 parent RDD 中一个或者多个 partition。而且这个依赖可以是完全依赖或者部分依赖（parent RDD 中某 partition 中一部分数据与 RDD x 中d的一个 parttion 相关，另一部分与 RDD x 中的另一个 partition 相关）。下图展示了完全依赖和部分依赖。
+再次考虑第三个问题，RDD x 中每个 partition 可以依赖于 parent RDD 中一个或者多个 partition。而且这个依赖可以是完全依赖或者部分依赖。部分依赖指的是 parent RDD 中某 partition 中一部分数据与 RDD x 中的一个 parttion 相关，另一部分与 RDD x 中的另一个 partition 相关。下图展示了完全依赖和部分依赖。
 
 ![Dependency](PNGfigures/Dependency.png)
 
@@ -73,17 +73,17 @@ RDD 之间的数据依赖问题实际包括三部分：
 在 Spark 中，完全依赖被称为 NarrowDependency，部分依赖被称为 ShuffleDependency（其实 ShuffleDependency 跟 MapReduce 中 shuffle 的数据依赖相同。mapper 将其 output 进行 partition，然后每个 reducer 会将所有 mapper 输出中属于自己的 partition 通过 HTTP fetch 得到）。第一种 1:1 的情况被称为 OneToOneDependency。至于 RDD x 中的每个 partitoin 对应的关系是 1:1 还是 N:1，是由 RDD x 中的 `getParents(partition id)` 决定（下图中某些例子会详细介绍）。还有一种 RangeDependency 的完全依赖，不过该依赖目前只在 UnionRDD 中使用，下面会介绍。
 
 所以，总结下来 partition 之间的依赖关系如下：
-- NarrowDependency (使用黑色实线或黑色虚线箭头表示)
+- NarrowDependency (==使用黑色实线或黑色虚线箭头表示==)
 	- OneToOneDependency (1:1)
  	- NarrowDependency (N:1)	 
 	- RangeDependency (只在 UnionRDD 中使用)
-- ShuffleDependency (使用红色箭头表示)
+- ShuffleDependency (==使用红色箭头表示==)
 
 > 之所以要划分 NarrowDependency 和 ShuffleDependency 是为了生成物理执行图，下一章会具体介绍。
 > 
-> 需要注意的是第二种 NarrowDependency (N:1) 很少在两个 RDD 之间出现，这里画出来只是理论上有可能，比如自己设计的奇葩 RDD。因为如果 parent RDD 中的 partition 同时被 child RDD 中多个 partitions 依赖，那么最后的依赖图与 ShuffleDependency 基本一样。只是对于 parent  RDD 中的 partition 来说一个是完全依赖，一个是部分依赖，而剪头数没有少。所以 Spark 定义的 NarrowDepedency 其实是 “each partition of the parent RDD is used by at most one partition of the child RDD“，但这也并不意味着必须是 1:1 依赖，参见下面的 cartesian(otherRDD)。这里很乱，其实看懂下面的几个典型的 RDD 依赖即可。
+> 需要注意的是第二种 NarrowDependency (N:1) 很少在两个 RDD 之间出现，这里画出来只是理论上有可能，比如自己设计的奇葩 RDD。因为如果 parent RDD 中的 partition 同时被 child RDD 中多个 partitions 依赖，那么最后生成的依赖图与 ShuffleDependency 基本一样。只是对于 parent  RDD 中的 partition 来说一个是完全依赖，一个是部分依赖，而剪头数没有少。所以 Spark 定义的 NarrowDepedency 其实是 “each partition of the parent RDD is used by at most one partition of the child RDD“，但这也并不意味着必须是 1:1 依赖，参见下面的 cartesian(otherRDD)。这里很乱，其实看懂下面的几个典型的 RDD 依赖即可。
 
-如何计算得到 RDD x 中的数据（records）？下图展示了 OneToOneDependency 的数据依赖，虽然 partition 和 partition 之间是 1:1，但不代表计算 records 的时候也是读一个 record 计算一个 record。 下图右边上下两个 pattern 之间的差别类似于下面两个程序的差别：
+==如何计算得到 RDD x 中的数据（records）？==下图展示了 OneToOneDependency 的数据依赖，虽然 partition 和 partition 之间是 1:1，但不代表计算 records 的时候也是读一个 record 计算一个 record。 下图右边上下两个 pattern 之间的差别类似于下面两个程序的差别：
 
 ![Dependency](PNGfigures/OneToOneDependency.png)
 
@@ -140,13 +140,13 @@ distinct() 功能是 deduplicate RDD 中的所有的重复数据。由于重复�
 
 ![cogroup](PNGfigures/cogroup.png)
 
-与 groupByKey() 不同，cogroup() 要 aggregate 两个或两个以上的 RDD。那么 CoGroupedRDD 与 RDD a 和 RDD b 的关系都必须是 ShuffleDepedency 么？是否存在 OneToOneDependency？
+与 groupByKey() 不同，cogroup() 要 aggregate 两个或两个以上的 RDD。==那么 CoGroupedRDD 与 RDD a 和 RDD b 的关系都必须是 ShuffleDepedency 么？是否存在 OneToOneDependency？==
 
 首先要明确的是 CoGroupedRDD 存在几个 partition 可以由用户直接设定，与 RDD a 和 RDD b 无关。然而，如果 CoGroupedRDD 中 partition 个数与 RDD a/b 中的 partition 个数不一样，那么不可能存在 1:1 的关系。
 
 再次，cogroup() 的计算结果放在 CoGroupedRDD 中哪个 partition 是由用户设置的 partitioner 确定的（默认是 HashPartitioner）。那么可以推出：即使 RDD a/b 中的 partition 个数与 CoGroupedRDD 中的一样，如果 RDD a/b 中的 partitioner 与 CoGroupedRDD 中的不一样，也不可能存在 1:1 的关系。比如，在上图的 example 里面，RDD a 是 RangePartitioner，b 是 HashPartitioner，CoGroupedRDD 也是 RangePartitioner 且 partition 个数与 a 的相同。那么很自然地，a 中的每个 partition 中 records 可以直接送到 CoGroupedRDD 中对应的 partition。RDD b 中的 records 必须再次进行划分与 shuffle 后才能进入对应的 partition。
 
-最后，经过上面分析，对于两个或两个以上的 RDD 聚合，当且仅当聚合后的 RDD 中 partitioner 类别及 partition 个数与前面的 RDD 都相同，才会与前面的 RDD 构成 1:1 的关系。否则，只能是 ShuffleDependency。这个算法对应的代码可以在`CoGroupedRDD.getDependencies()` 中找到，虽然比较难理解。
+最后，经过上面分析，==对于两个或两个以上的 RDD 聚合，当且仅当聚合后的 RDD 中 partitioner 类别及 partition 个数与前面的 RDD 都相同，才会与前面的 RDD 构成 1:1 的关系。否则，只能是 ShuffleDependency。==这个算法对应的代码可以在`CoGroupedRDD.getDependencies()` 中找到，虽然比较难理解。
 
 > Spark 代码中如何表示 CoGroupedRDD 中的 partition 依赖于多个 parent RDDs 中的 partitions？
 > 
@@ -166,7 +166,7 @@ intersection() 功能是抽取出 RDD a 和 RDD b 中的公共数据。先使用
 
 ![join](PNGfigures/join.png)
 
-join() 将两个 RDD[(K, V)] 按照 SQL 中的 join 方式聚合在一起。与 intersection() 类似，首先进行 cogroup()，得到`<K,  (Iterable[V1], Iterable[V2]) >`类型的 MappedValuesRDD，然后对 Iterable[V1] 和 Iterable[V2] 做笛卡尔集，并将集合 flat() 化。
+join() 将两个 RDD[(K, V)] 按照 SQL 中的 join 方式聚合在一起。与 intersection() 类似，首先进行 cogroup()，得到`<K,  (Iterable[V1], Iterable[V2])>`类型的 MappedValuesRDD，然后对 Iterable[V1] 和 Iterable[V2] 做笛卡尔集，并将集合 flat() 化。
 
 这里给出了两个 example，第一个的 RDD 1 和 RDD 2 使用 RangePartitioner 划分，而 CoGroupedRDD 使用 HashPartitioner，与 RDD 1/2 都不一样，因此是 ShuffleDependency。第二个 example 中， RDD 1 事先使用 HashPartitioner 对其 key 进行划分，得到三个 partition，与 CoGroupedRDD 使用的 HashPartitioner(3) 一致，因此数据依赖是 1:1。如果 RDD 2 事先也使用 HashPartitioner 对其 key 进行划分，得到三个 partition，那么 join() 就不存在 ShuffleDepedency 了，这个 join() 也就变成了 hashjoin()。
 
@@ -194,10 +194,10 @@ Cartesian 对两个 RDD 做笛卡尔集，生成的 CartesianRDD 中 partition �
 
 coalesce() 可以将 parent RDD 的 partition 个数进行调整，比如从 5 个减少到 3 个，或者从 5 个增加到 10 个。需要注意的是当 shuffle = false 的时候，是不能增加 partition 个数的（不能从 5 个变为 10 个）。
 
-coalesce() 的核心问题是如何确立 CoalescedRDD 中 partition 和 parent RDD 中 partition 的关系。
+coalesce() 的核心问题是==如何确立 CoalescedRDD 中 partition 和其 parent RDD 中 partition 的关系。==
 
-- coalesce(shuffle = false) 时，由于不能进行 shuffle，问题变为 parent RDD 中那些 partition 可以合并在一起。合并因素除了要考虑 partition 中元素个数外，还要考虑 locality 及 balance 的问题。因此，Spark 设计了一个非常复杂的算法来解决该问题（算法部分我还没有深究）。
-- coalesce(shuffle = true) 时，由于可以进行 shuffle，问题变为如何将 RDD 中所有 records 平均划分到 N 个 partition 中。很简单，在每个 partition 中，给每个 record 附加一个 key，key 递增，这样经过 hash(key) 后，key 可以被平均分配到不同的 partition 中，类似 Round-robin。在第二个例子中，RDD a 中的每个元素，先被加上了递增的 key（如 MapPartitionsRDD 第二个 partition 中 (1, 3) 中的 1）。在每个 partition 中，第一个元素 (Key, Value) 中的 key 由 `(new Random(index)).nextInt(numPartitions)` 计算得到，index 是该 partition 的索引，numPartitions 是 CoalescedRDD 中的 partition 个数。接下来元素的 key 是递增的，然后 shuffle 后的 ShuffledRDD 可以得到均分的 records，然后经过复杂算法来建立 ShuffledRDD 和 CoalescedRDD 之间的数据联系，最后过滤掉 key，得到 coalesce 后的结果 MappedRDD。
+- coalesce(shuffle = false) 时，由于不能进行 shuffle，==问题变为 parent RDD 中那些 partition 可以合并在一起。==合并因素除了要考虑 partition 中元素个数外，还要考虑 locality 及 balance 的问题。因此，Spark 设计了一个非常复杂的算法来解决该问题（算法部分我还没有深究）。
+- coalesce(shuffle = true) 时，==由于可以进行 shuffle，问题变为如何将 RDD 中所有 records 平均划分到 N 个 partition 中。==很简单，在每个 partition 中，给每个 record 附加一个 key，key 递增，这样经过 hash(key) 后，key 可以被平均分配到不同的 partition 中，类似 Round-robin 算法。在第二个例子中，RDD a 中的每个元素，先被加上了递增的 key（如 MapPartitionsRDD 第二个 partition 中 (1, 3) 中的 1）。在每个 partition 中，第一个元素 (Key, Value) 中的 key 由 `(new Random(index)).nextInt(numPartitions)` 计算得到，index 是该 partition 的索引，numPartitions 是 CoalescedRDD 中的 partition 个数。接下来元素的 key 是递增的，然后 shuffle 后的 ShuffledRDD 可以得到均分的 records，然后经过复杂算法来建立 ShuffledRDD 和 CoalescedRDD 之间的数据联系，最后过滤掉 key，得到 coalesce 后的结果 MappedRDD。
 
 **10) repartition(numPartitions)**
 
@@ -206,7 +206,7 @@ coalesce() 的核心问题是如何确立 CoalescedRDD 中 partition 和 parent 
 ## Primitive transformation()
 **combineByKey()**
 
-分析了这么多 RDD 的逻辑执行图，它们之间有没有共同之处？如果有，是怎么被设计和实现的？
+==分析了这么多 RDD 的逻辑执行图，它们之间有没有共同之处？如果有，是怎么被设计和实现的？==
 
 仔细分析 RDD 的逻辑执行图会发现，ShuffleDependency 左边的 RDD 中的 record 要求是 \<key, value\> 型的，经过 ShuffleDependency 后，包含相同 key 的 records 会被 aggregate 到一起，然后在 aggregated 的 records 上执行不同的计算逻辑。实际执行时（后面的章节会具体谈到），很多 transformation() 如 groupByKey()，reduceByKey() 是边 aggregate 数据边执行计算逻辑的，因此共同之处就是 **aggregate 同时 compute()**。Spark 使用 combineByKey() 来实现这个 aggregate + compute() 的基础操作。
 

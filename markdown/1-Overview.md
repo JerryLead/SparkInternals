@@ -1,5 +1,5 @@
 # 概览
-拿到系统后，部署系统是第一件事，那么系统部署成功以后，各个节点都启动了哪些服务？
+拿到系统后，部署系统是第一件事，那么系统部署成功以后，==各个节点都启动了哪些服务？==
 
 ## 部署图
 ![deploy](PNGfigures/deploy.png)
@@ -13,7 +13,7 @@
 	```scala
 	./bin/run-example SparkPi 10
 	``` 
- 那么 SparkPi 就是 Master 上的 Driver。如果是 YARN 集群，那么 Dirver 可能被调度到 Worker 节点上运行（比如上图中的 Worker Node 2）。另外，如果直接在自己的 PC 运行 driver program，比如在 Eclipse 中运行 driver program，使用
+ 那么 SparkPi 就是 Master 上的 Driver。如果是 YARN 集群，那么 Driver 可能被调度到 Worker 节点上运行（比如上图中的 Worker Node 2）。另外，如果直接在自己的 PC 运行 driver program，比如在 Eclipse 中运行 driver program，使用
  		
  	```scala
  	val sc = new SparkContext("spark://master:7077", "AppName")
@@ -21,9 +21,9 @@
   去连接 master 的话，driver 就在自己的 PC 上，但是不推荐这样的方式，因为 PC 和 Workers 可能不在一个局域网，driver 和 executor 之间的通信会很慢。
  		
 		
-- 每个 Worker 上存在一个或者多个 ExecutorBackend 进程。每个进程包含一个 Exectuor 对象，该对象持有一个线程池，每个线程可以执行一个 task。
+- 每个 Worker 上存在一个或者多个 ExecutorBackend 进程。每个进程包含一个 Executor 对象，该对象持有一个线程池，每个线程可以执行一个 task。
 - 每个 application 包含一个 driver 和多个 executors，每个 executor 里面运行的 tasks 都属于同一个 application。
-- 在 Standalone 版本中，ExecutorBackend 被实例化成 CoarseGrainedExecutorBackend 进程。在我部署的集群中每个 Worker 只运行了一个 CoarseGrainedExecutorBackend 进程，没有发现如何配置多个 CoarseGrainedExecutorBackend 进程。（有童鞋知道怎么配么？）
+- 在 Standalone 版本中，ExecutorBackend 被实例化成 CoarseGrainedExecutorBackend 进程。在我部署的集群中每个 Worker 只运行了一个 CoarseGrainedExecutorBackend 进程，没有发现如何配置多个 CoarseGrainedExecutorBackend 进程。（应该是运行多个 applications 的时候会产生多个进程，这个我还没有实验）
 - Worker 通过持有 ExecutorRunner 对象来控制 CoarseGrainedExecutorBackend 的启停。
 
 了解了部署图之后，我们先给出一个 job 的例子，然后概览一下 job 如何生成与运行。
@@ -82,7 +82,7 @@ object GroupByTest {
 阅读代码后，用户头脑中 job 的执行流程是这样的：
 ![deploy](PNGfigures/UserView.png)
 
-具体流程：
+具体流程很简单，这里来估算下 data size 和执行结果：
 
 1. 初始化 SparkConf()。
 2. 初始化 numMappers=100, numKVPairs=10,000, valSize=1000, numReducers= 36。
@@ -125,7 +125,7 @@ MappedValuesRDD[4] at groupByKey at GroupByTest.scala:51 (36 partitions)
 - 最后的 MappedValuesRDD 将前面的 RDD 中的 每个value（也就是Array[Byte]）都转换成 Iterator。
 - 最后的 count 与上一个 count 的执行方式类似。
 
-可以看到逻辑执行图描述的是 job 的**数据流**：job 会经过哪些 transformation()，中间生成哪些 RDD 及 RDD 之间的依赖关系。
+==可以看到逻辑执行图描述的是 job 的**数据流**：job 会经过哪些 transformation()，中间生成哪些 RDD 及 RDD 之间的依赖关系。==
 
 ## Job 物理执行图
 逻辑执行图表示的是数据上的依赖关系，不是 task 的执行图。在 Hadoop 中，用户直接面对 task，mapper 和 reducer 的职责分明：一个进行分块处理，一个进行 aggregate。Hadoop 中 整个数据流是固定的，只需要填充 map() 和 reduce() 函数即可。Spark 面对的是更复杂的数据处理流程，数据依赖更加灵活，很难将数据流和物理 task 简单地统一在一起。因此 Spark 将数据流和具体 task 的执行流程分开，并设计算法将逻辑执行图转换成 task 物理执行图，转换算法后面的章节讨论。
@@ -146,11 +146,11 @@ MappedValuesRDD[4] at groupByKey at GroupByTest.scala:51 (36 partitions)
 
 - 整个 job 包含 2 个 stage。
 - Stage 1 包含 100 个 ShuffleMapTask，每个 task 负责从 cache 中读取 pairs1 并将其进行类似 Hadoop 中 mapper 所做的 partition，最后将 partition 结果写入本地磁盘。
-- Stage 0 包含 36 个 ResultTask，每个 task 首先 shuffle 自己要处理的数据，边 fetch 数据边进行 aggregate 以及后续的 mapPartitions 操作，最后进行 mapValues 和 count() 计算得到 result。
+- Stage 0 包含 36 个 ResultTask，每个 task 首先 shuffle 自己要处理的数据，边 fetch 数据边进行 aggregate 以及后续的 mapPartitions() 操作，最后进行 mapValues() 和 count() 计算得到 result。
 - task 执行完后，driver 收集每个 task 的执行结果，然后进行 sum()。
 - job 1 结束。
 
-可以看到物理执行图并不简单。与 MapReduce 不同的是，Spark 中一个 application 可能包含多个 job，每个 job 包含多个 stage，每个 stage 包含多个 task。怎么划分 job，怎么划分 stage，怎么划分 task 等等问题会在后面的章节介绍。
+可以看到物理执行图并不简单。与 MapReduce 不同的是，Spark 中一个 application 可能包含多个 job，每个 job 包含多个 stage，每个 stage 包含多个 task。==怎么划分 job，怎么划分 stage，怎么划分 task 等等问题会在后面的章节介绍。==
 
 ## Discussion
 到这里，我们对整个系统和 job 的生成与执行有了概念，而且还探讨了 cache 等特性。
@@ -158,7 +158,7 @@ MappedValuesRDD[4] at groupByKey at GroupByTest.scala:51 (36 partitions)
 
 1. 如何生成逻辑执行图
 2. 如何生成物理执行图
-3. Job 如何提交与调度
+3. 如何提交与调度 Job 
 4. Task 如何生成、执行与结果处理
 5. 如何进行 shuffle
 6. cache机制
