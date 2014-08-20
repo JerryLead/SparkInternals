@@ -1,5 +1,5 @@
 # 概览
-拿到系统后，部署系统是第一件事，那么系统部署成功以后，==各个节点都启动了哪些服务？==
+拿到系统后，部署系统是第一件事，那么系统部署成功以后，**各个节点都启动了哪些服务？**
 
 ## 部署图
 ![deploy](PNGfigures/deploy.png)
@@ -125,7 +125,7 @@ MappedValuesRDD[4] at groupByKey at GroupByTest.scala:51 (36 partitions)
 - 最后的 MappedValuesRDD 将前面的 RDD 中的 每个value（也就是Array[Byte]）都转换成 Iterator。
 - 最后的 count 与上一个 count 的执行方式类似。
 
-==可以看到逻辑执行图描述的是 job 的**数据流**：job 会经过哪些 transformation()，中间生成哪些 RDD 及 RDD 之间的依赖关系。==
+**可以看到逻辑执行图描述的是 job 的数据流：job 会经过哪些 transformation()，中间生成哪些 RDD 及 RDD 之间的依赖关系。**
 
 ## Job 物理执行图
 逻辑执行图表示的是数据上的依赖关系，不是 task 的执行图。在 Hadoop 中，用户直接面对 task，mapper 和 reducer 的职责分明：一个进行分块处理，一个进行 aggregate。Hadoop 中 整个数据流是固定的，只需要填充 map() 和 reduce() 函数即可。Spark 面对的是更复杂的数据处理流程，数据依赖更加灵活，很难将数据流和物理 task 简单地统一在一起。因此 Spark 将数据流和具体 task 的执行流程分开，并设计算法将逻辑执行图转换成 task 物理执行图，转换算法后面的章节讨论。
@@ -150,7 +150,7 @@ MappedValuesRDD[4] at groupByKey at GroupByTest.scala:51 (36 partitions)
 - task 执行完后，driver 收集每个 task 的执行结果，然后进行 sum()。
 - job 1 结束。
 
-可以看到物理执行图并不简单。与 MapReduce 不同的是，Spark 中一个 application 可能包含多个 job，每个 job 包含多个 stage，每个 stage 包含多个 task。==怎么划分 job，怎么划分 stage，怎么划分 task 等等问题会在后面的章节介绍。==
+可以看到物理执行图并不简单。与 MapReduce 不同的是，Spark 中一个 application 可能包含多个 job，每个 job 包含多个 stage，每个 stage 包含多个 task。**怎么划分 job，怎么划分 stage，怎么划分 task 等等问题会在后面的章节介绍。**
 
 ## Discussion
 到这里，我们对整个系统和 job 的生成与执行有了概念，而且还探讨了 cache 等特性。
