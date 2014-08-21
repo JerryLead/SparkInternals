@@ -4,12 +4,12 @@
 ![deploy](PNGfigures/GeneralLogicalPlan.png)
 
 典型的 Job 逻辑执行图如上所示，经过下面四个步骤可以得到最终执行结果：
-- 从数据源（可以是本地 file，内存数据结构， HDFS，HBase 等）读取数据创建最初的 RDD。上一章例子中的 parallelize 相当于 createRDD()。
+- 从数据源（可以是本地 file，内存数据结构， HDFS，HBase 等）读取数据创建最初的 RDD。上一章例子中的 parallelize() 相当于 createRDD()。
 - 对 RDD 进行一系列的 transformation() 操作，每一个 transformation() 会产生一个或多个包含不同类型 T 的 RDD[T]。T 可以是 Scala 里面的基本类型或数据结构，不限于 (K, V)。但如果是 (K, V)，K 不能是 Array 等复杂类型（因为难以在复杂类型上定义 partition 函数）。
 - 对最后的 final RDD 进行 action() 操作，每个 partition 计算后产生结果 result。
 - 将 result 回送到 driver 端，进行最后的 f(list[result]) 计算。例子中的 count() 实际包含了action() 和 sum() 两步计算。
 
-> RDD 可以被 cache 到内存或者 checkpoint 到磁盘上。RDD 中的 partition 个数不固定，通常由用户设定。RDD 和 RDD 之间 partition 的依赖关系可以不是 1 对 1，如上图既有 1 对 1 关系，也展示了多对多的关系。
+> RDD 可以被 cache 到内存或者 checkpoint 到磁盘上。RDD 中的 partition 个数不固定，通常由用户设定。RDD 和 RDD 之间 partition 的依赖关系可以不是 1 对 1，如上图既有 1 对 1 关系，也有多对多的关系。
 
 ## 逻辑执行图的生成
 
@@ -60,17 +60,17 @@ RDD 之间的数据依赖问题实际包括三部分：
 
 第一个问题可以很自然的解决，比如`x = rdda.transformation(rddb)` (e.g., x = a.join(b)) 就表示 RDD x 同时依赖于 RDD a 和 RDD b。
 
-第二个问题中的 partition 个数一般由用户指定，不指定的话一般取`max(parent RDD 1, .., parent RDD n)`。
+第二个问题中的 partition 个数一般由用户指定，不指定的话一般取`max(numPartitions[parent RDD 1], .., numPartitions[parent RDD n])`。
 
 第三个问题比较复杂。需要考虑这个 transformation() 的语义，不同的 transformation() 的依赖关系不同。比如 map() 是 1:1，而 groupByKey() 逻辑执行图中的 ShuffledRDD 中的每个 partition 依赖于 parent RDD 中所有的 partition，还有更复杂的情况。
 
-再次考虑第三个问题，RDD x 中每个 partition 可以依赖于 parent RDD 中一个或者多个 partition。而且这个依赖可以是完全依赖或者部分依赖。部分依赖指的是 parent RDD 中某 partition 中一部分数据与 RDD x 中的一个 parttion 相关，另一部分与 RDD x 中的另一个 partition 相关。下图展示了完全依赖和部分依赖。
+再次考虑第三个问题，RDD x 中每个 partition 可以依赖于 parent RDD 中一个或者多个 partition。而且这个依赖可以是完全依赖或者部分依赖。部分依赖指的是 parent RDD 中某 partition 中一部分数据与 RDD x 中的一个 parttion 相关，另一部分数据与 RDD x 中的另一个 partition 相关。下图展示了完全依赖和部分依赖。
 
 ![Dependency](PNGfigures/Dependency.png)
 
-前两个是完全依赖，RDD x 中的 partition 与 parent RDD 中的 partition/partitions 完全相关。最后一个是部分依赖，RDD x 中的 partition 只与 parent RDD 中的 partition 一部分数据相关。另一部分数据可能还要送到 RDD x 中的其他 partition。
+前两个是完全依赖，RDD x 中的 partition 与 parent RDD 中的 partition/partitions 完全相关。最后一个是部分依赖，RDD x 中的 partition 只与 parent RDD 中的 partition 一部分数据相关，另一部分数据与 RDD x 中的其他 partition 相关。
 
-在 Spark 中，完全依赖被称为 NarrowDependency，部分依赖被称为 ShuffleDependency（其实 ShuffleDependency 跟 MapReduce 中 shuffle 的数据依赖相同。mapper 将其 output 进行 partition，然后每个 reducer 会将所有 mapper 输出中属于自己的 partition 通过 HTTP fetch 得到）。第一种 1:1 的情况被称为 OneToOneDependency。至于 RDD x 中的每个 partitoin 对应的关系是 1:1 还是 N:1，是由 RDD x 中的 `getParents(partition id)` 决定（下图中某些例子会详细介绍）。还有一种 RangeDependency 的完全依赖，不过该依赖目前只在 UnionRDD 中使用，下面会介绍。
+在 Spark 中，完全依赖被称为 NarrowDependency，部分依赖被称为 ShuffleDependency（其实 ShuffleDependency 跟 MapReduce 中 shuffle 的数据依赖相同。mapper 将其 output 进行 partition，然后每个 reducer 会将所有 mapper 输出中属于自己的 partition 通过 HTTP fetch 得到）。第一种 1:1 的情况被称为 OneToOneDependency。第二种 N:1 的情况被称为普通 NarrowDependency，具体 RDD x 中的每个 partitoin 对应的关系是 1:1 还是 N:1，是由 RDD x 中的 `getParents(partition id)` 决定（下图中某些例子会详细介绍）。还有一种 RangeDependency 的完全依赖，不过该依赖目前只在 UnionRDD 中使用，下面会介绍。
 
 所以，总结下来 partition 之间的依赖关系如下：
 - NarrowDependency (**使用黑色实线或黑色虚线箭头表示**)
@@ -81,7 +81,7 @@ RDD 之间的数据依赖问题实际包括三部分：
 
 > 之所以要划分 NarrowDependency 和 ShuffleDependency 是为了生成物理执行图，下一章会具体介绍。
 > 
-> 需要注意的是第二种 NarrowDependency (N:1) 很少在两个 RDD 之间出现，这里画出来只是理论上有可能，比如自己设计的奇葩 RDD。因为如果 parent RDD 中的 partition 同时被 child RDD 中多个 partitions 依赖，那么最后生成的依赖图与 ShuffleDependency 基本一样。只是对于 parent  RDD 中的 partition 来说一个是完全依赖，一个是部分依赖，而剪头数没有少。所以 Spark 定义的 NarrowDepedency 其实是 “each partition of the parent RDD is used by at most one partition of the child RDD“，但这也并不意味着必须是 1:1 依赖，参见下面的 cartesian(otherRDD)。这里很乱，其实看懂下面的几个典型的 RDD 依赖即可。
+> 需要注意的是第二种 NarrowDependency (N:1) 比较少在两个 RDD 之间出现。因为如果 parent RDD 中的 partition 同时被 child RDD 中多个 partitions 依赖，那么最后生成的依赖图往往与 ShuffleDependency 一样。只是对于 parent  RDD 中的 partition 来说一个是完全依赖，一个是部分依赖，而箭头数没有少。所以 Spark 定义的 NarrowDepedency 其实是 “each partition of the parent RDD is used by at most one partition of the child RDD“，但这也并不意味着必须是 1:1 依赖，参见下面的 cartesian(otherRDD)。这里描述的比较乱，其实看懂下面的几个典型的 RDD 依赖即可。
 
 **如何计算得到 RDD x 中的数据（records）？**下图展示了 OneToOneDependency 的数据依赖，虽然 partition 和 partition 之间是 1:1，但不代表计算 records 的时候也是读一个 record 计算一个 record。 下图右边上下两个 pattern 之间的差别类似于下面两个程序的差别：
 
@@ -156,7 +156,7 @@ distinct() 功能是 deduplicate RDD 中的所有的重复数据。由于重复�
 > 
 > Dependency 类中的 getParents(partition id) 负责给出某个 partition 按照该 dependency 所依赖的 parent RDD 中的 partitions: List[Int]。
 > 
-> getPartitions() 负责给出 child RDD 中有多少个 partition，以及每个 partition 如何序列化。
+> getPartitions() 负责给出 RDD 中有多少个 partition，以及每个 partition 如何序列化。
 
 **5) intersection(otherRDD)**
 
@@ -170,7 +170,7 @@ intersection() 功能是抽取出 RDD a 和 RDD b 中的公共数据。先使用
 
 join() 将两个 RDD[(K, V)] 按照 SQL 中的 join 方式聚合在一起。与 intersection() 类似，首先进行 cogroup()，得到`<K,  (Iterable[V1], Iterable[V2])>`类型的 MappedValuesRDD，然后对 Iterable[V1] 和 Iterable[V2] 做笛卡尔集，并将集合 flat() 化。
 
-这里给出了两个 example，第一个的 RDD 1 和 RDD 2 使用 RangePartitioner 划分，而 CoGroupedRDD 使用 HashPartitioner，与 RDD 1/2 都不一样，因此是 ShuffleDependency。第二个 example 中， RDD 1 事先使用 HashPartitioner 对其 key 进行划分，得到三个 partition，与 CoGroupedRDD 使用的 HashPartitioner(3) 一致，因此数据依赖是 1:1。如果 RDD 2 事先也使用 HashPartitioner 对其 key 进行划分，得到三个 partition，那么 join() 就不存在 ShuffleDepedency 了，这个 join() 也就变成了 hashjoin()。
+这里给出了两个 example，第一个 example 的 RDD 1 和 RDD 2 使用 RangePartitioner 划分，而 CoGroupedRDD 使用 HashPartitioner，与 RDD 1/2 都不一样，因此是 ShuffleDependency。第二个 example 中， RDD 1 事先使用 HashPartitioner 对其 key 进行划分，得到三个 partition，与 CoGroupedRDD 使用的 HashPartitioner(3) 一致，因此数据依赖是 1:1。如果 RDD 2 事先也使用 HashPartitioner 对其 key 进行划分，得到三个 partition，那么 join() 就不存在 ShuffleDepedency 了，这个 join() 也就变成了 hashjoin()。
 
 **7) sortByKey(ascending, numPartitions)**
 
@@ -186,7 +186,7 @@ sortByKey() 将 RDD[(K, V)] 中的 records 按 key 排序，ascending = true 表
 
 Cartesian 对两个 RDD 做笛卡尔集，生成的 CartesianRDD 中 partition 个数 = partitionNum(RDD a) * partitionNum(RDD b)。
 
-这里的依赖关系与前面的不太一样，CartesianRDD 中每个partition 依赖两个 parent RDD。而且 CartesianRDD 中每个 partition 只完全依赖 RDD a 中一个 partition，同时又完全依赖 RDD b 中另一个 partition。这里没有红色箭头，因为所有依赖都是 NarrowDependency。
+这里的依赖关系与前面的不太一样，CartesianRDD 中每个partition 依赖两个 parent RDD，而且其中每个 partition 完全依赖 RDD a 中一个 partition，同时又完全依赖 RDD b 中另一个 partition。这里没有红色箭头，因为所有依赖都是 NarrowDependency。
 
 > CartesianRDD.getDependencies() 返回 rdds[RDD a, RDD b]。CartesianRDD 中的 partiton i 依赖于 (RDD a).List(i / numPartitionsInRDDb) 和 (RDD b).List(i % numPartitionsInRDDb)。
 
@@ -210,7 +210,7 @@ coalesce() 的核心问题是**如何确立 CoalescedRDD 中 partition 和其 pa
 
 **分析了这么多 RDD 的逻辑执行图，它们之间有没有共同之处？如果有，是怎么被设计和实现的？**
 
-仔细分析 RDD 的逻辑执行图会发现，ShuffleDependency 左边的 RDD 中的 record 要求是 \<key, value\> 型的，经过 ShuffleDependency 后，包含相同 key 的 records 会被 aggregate 到一起，然后在 aggregated 的 records 上执行不同的计算逻辑。实际执行时（后面的章节会具体谈到），很多 transformation() 如 groupByKey()，reduceByKey() 是边 aggregate 数据边执行计算逻辑的，因此共同之处就是 **aggregate 同时 compute()**。Spark 使用 combineByKey() 来实现这个 aggregate + compute() 的基础操作。
+仔细分析 RDD 的逻辑执行图会发现，ShuffleDependency 左边的 RDD 中的 record 要求是 \<key, value\> 型的，经过 ShuffleDependency 后，包含相同 key 的 records 会被 aggregate 到一起，然后在 aggregated 的 records 上执行不同的计算逻辑。实际执行时（后面的章节会具体谈到）很多 transformation() 如 groupByKey()，reduceByKey() 是边 aggregate 数据边执行计算逻辑的，因此共同之处就是 **aggregate 同时 compute()**。Spark 使用 combineByKey() 来实现这个 aggregate + compute() 的基础操作。
 
 combineByKey() 的定义如下：
 ```scala
@@ -228,10 +228,10 @@ combineByKey() 的定义如下：
 ## Discussion
 至此，我们讨论了如何生成 job 的逻辑执行图，这些图也是 Spark 看似简单的 API 背后的复杂计算逻辑及数据依赖关系。
 
-整个 job 会产生哪些 RDD 由 transformation() 语义决定。一些 transformation()， 比如 cogroup 会被很多其他操作用到。
+整个 job 会产生哪些 RDD 由 transformation() 语义决定。一些 transformation()， 比如 cogroup() 会被很多其他操作用到。
 
-RDD 本身的依赖关系由 transformation() 生成的每一个 RDD 本身语义决定。如 CoGroupedRDD 依赖于所有参加 cogroup() 的 RDDs。具体是什么依赖由 `RDD.getDependencies()`决定。
+RDD 本身的依赖关系由 transformation() 生成的每一个 RDD 本身语义决定。如 CoGroupedRDD 依赖于所有参加 cogroup() 的 RDDs。
 
-RDD 中 partition 依赖关系分为 NarrowDependency 和 ShuffleDependency。Child RDD 中某个 partition 依赖于 parent RDD 中哪些 partitions 由该 dependency 中的 `getParents(partition id)` 决定。
+RDD 中 partition 依赖关系分为 NarrowDependency 和 ShuffleDependency。前者是完全伊依赖，后者是部分依赖。NarrowDependency 里面又包含多种情况，只有前后两个 RDD 的 partition 个数以及 partitioner 都一样，才会出现 NarrowDependency。
 
 从数据处理逻辑的角度来看，MapReduce 相当于 Spark 中的 map() + reduceByKey()，但严格来讲 MapReduce 中的 reduce() 要比 reduceByKey() 的功能强大些，详细差别会在 Shuffle details 一章中继续讨论。
