@@ -40,6 +40,8 @@ Doc Version: 1.0.2.0
 
 可以直接点 md 文件查看。
 
+喜欢看 pdf 版本的可以去 [这里](https://github.com/JerryLead/SparkInternals/tree/master/pdf) 下载。
+
 如果使用 Mac OS X 的话，推荐下载 [MacDown](http://macdown.uranusjr.com/) 后使用 github 主题去阅读这些文档。
 
 ## Examples
