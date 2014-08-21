@@ -38,9 +38,23 @@ Doc Version: 1.0.2.0
 8. Job Scheduling 尚未撰写
 9. Fault-tolerance 尚未撰写
 
-可以直接点 md 文件直接查看。
+可以直接点 md 文件查看。
 
-如果使用 Mac OS X 的话，推荐下载 [MacDown](http://macdown.uranusjr.com/) 去阅读这些文档。
+如果使用 Mac OS X 的话，推荐下载 [MacDown](http://macdown.uranusjr.com/) 后使用 github 主题去阅读这些文档。
 
 ## Examples
 写文档期间为了 debug 系统，自己设计了一些 examples，放在了 [SparkLearning/src/internals](https://github.com/JerryLead/SparkLearning/tree/master/src/internals) 下。
+
+## Acknowledgement
+
+文档写作过程中，遇到过一些细节问题，感谢下列同学给予的解答和帮助：
+
+[@Andrew-Xia](http://weibo.com/u/1410938285)
+
+[@CrazyJVM](http://weibo.com/476691290)
+
+[@王联辉](http://weibo.com/u/1685831233)
+
+[@Joshuawangzj](http://weibo.com/u/1619689670)
+
+特别感谢 [@明风Andy](http://weibo.com/mingfengandy) 同学给予的大力支持。
