@@ -84,7 +84,7 @@ executor 收到 serialized task 后，先反序列化 task，这时候会反序�
 
 ### 问题：broadcast RDD 会怎样?
 
-[@Andrew-Xia](http://weibo.com/u/1410938285?from=profile&wvr=5&loc=infdomain) 回答道：不会怎样，就是这个rdd在每个executor中实例化一份。
+[@Andrew-Xia](http://weibo.com/u/1410938285) 回答道：不会怎样，就是这个rdd在每个executor中实例化一份。
 
 ## Discussion
 
