@@ -49,7 +49,7 @@ Doc Version: 1.0.2.0
 
 ## Acknowledgement
 
-文档写作过程中，遇到过一些细节问题，感谢下列同学给予的解答和帮助：
+文档写作过程中，遇到过一些细节问题，感谢下列同学给予的解答、讨论和帮助：
 
 [@Andrew-Xia](http://weibo.com/u/1410938285)
 
@@ -57,6 +57,10 @@ Doc Version: 1.0.2.0
 
 [@王联辉](http://weibo.com/u/1685831233)
 
+同时感谢下列同学指出文档中的不足和错误：
+
 [@Joshuawangzj](http://weibo.com/u/1619689670)
+
+[@_cs_cm](http://weibo.com/u/1551746393)
 
 特别感谢 [@明风Andy](http://weibo.com/mingfengandy) 同学给予的大力支持。

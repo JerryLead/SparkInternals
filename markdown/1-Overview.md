@@ -13,7 +13,7 @@
 	```scala
 	./bin/run-example SparkPi 10
 	``` 
- 那么 SparkPi 就是 Master 上的 Driver。如果是 YARN 集群，那么 Driver 可能被调度到 Worker 节点上运行（比如上图中的 Worker Node 2）。另外，如果直接在自己的 PC 运行 driver program，比如在 Eclipse 中运行 driver program，使用
+ 那么 SparkPi 就是 Master 上的 Driver。如果是 YARN 集群，那么 Driver 可能被调度到 Worker 节点上运行（比如上图中的 Worker Node 2）。另外，如果直接在自己的 PC 上运行 driver program，比如在 Eclipse 中运行 driver program，使用
  		
  	```scala
  	val sc = new SparkContext("spark://master:7077", "AppName")
@@ -96,12 +96,11 @@ object GroupByTest {
 
 
 ## Job 逻辑执行图
- Job 的实际执行流程比用户头脑中的要复杂，需要先建立逻辑执行图（或者叫数据依赖图），然后划分逻辑执行图生成 DAG 型的物理执行图，然后生成具体 task执行。分析一下这个 job 的逻辑执行图：
+ Job 的实际执行流程比用户头脑中的要复杂，需要先建立逻辑执行图（或者叫数据依赖图），然后划分逻辑执行图生成 DAG 型的物理执行图，然后生成具体 task 执行。分析一下这个 job 的逻辑执行图：
 
 使用 `RDD.toDebugString` 可以看到整个 logical plan （RDD 的数据依赖关系）如下
 
 ```scala
-MappedValuesRDD[4] at groupByKey at GroupByTest.scala:51 (36 partitions)
   MapPartitionsRDD[3] at groupByKey at GroupByTest.scala:51 (36 partitions)
     ShuffledRDD[2] at groupByKey at GroupByTest.scala:51 (36 partitions)
       FlatMappedRDD[1] at flatMap at GroupByTest.scala:38 (100 partitions)
@@ -120,9 +119,9 @@ MappedValuesRDD[4] at groupByKey at GroupByTest.scala:51 (36 partitions)
 - 第一个 count() 执行时，先在每个 partition 上执行 count，然后执行结果被发送到 driver，最后在 driver 端进行 sum。
 - 由于 FlatMappedRDD 被 cache 到内存，因此这里将里面的 partition 都换了一种颜色表示。
 - groupByKey 产生了后面三个 RDD，为什么产生这三个在后面章节讨论。
-- 如果 job 需要 shuffle，会产生 ShuffledRDD。该 RDD 与前面的 RDD 的关系类似于 Hadoop 中 mapper 输出数据与 reducer 输入数据之间的关系。
-- MapPartitionsRDD 里包含 groupByKey 的结果。
-- 最后的 MappedValuesRDD 将前面的 RDD 中的 每个value（也就是Array[Byte]）都转换成 Iterator。
+- 如果 job 需要 shuffle，一般会产生 ShuffledRDD。该 RDD 与前面的 RDD 的关系类似于 Hadoop 中 mapper 输出数据与 reducer 输入数据之间的关系。
+- MapPartitionsRDD 里包含 groupByKey() 的结果。
+- 最后将 MapPartitionsRDD 中的 每个value（也就是Array[Byte]）都转换成 Iterable 类型。
 - 最后的 count 与上一个 count 的执行方式类似。
 
 **可以看到逻辑执行图描述的是 job 的数据流：job 会经过哪些 transformation()，中间生成哪些 RDD 及 RDD 之间的依赖关系。**
@@ -133,7 +132,7 @@ MappedValuesRDD[4] at groupByKey at GroupByTest.scala:51 (36 partitions)
 针对这个 job，我们先画出它的物理执行 DAG 图如下：
 ![deploy](PNGfigures/PhysicalView.png)
 
-可以看到 application 产生了两个 job，第一个 job 由第一个 action（也就是 `pairs1.count`）触发产生，分析一下第一个 job：
+可以看到 GroupByTest 这个 application 产生了两个 job，第一个 job 由第一个 action（也就是 `pairs1.count`）触发产生，分析一下第一个 job：
 
 - 整个 job 只包含 1 个 stage。
 - Stage 0 包含 100 个 ResultTask。
@@ -145,8 +144,8 @@ MappedValuesRDD[4] at groupByKey at GroupByTest.scala:51 (36 partitions)
 第二个 job 由 `pairs1.groupByKey(numReducers).count` 触发产生。分析一下该 job：
 
 - 整个 job 包含 2 个 stage。
-- Stage 1 包含 100 个 ShuffleMapTask，每个 task 负责从 cache 中读取 pairs1 并将其进行类似 Hadoop 中 mapper 所做的 partition，最后将 partition 结果写入本地磁盘。
-- Stage 0 包含 36 个 ResultTask，每个 task 首先 shuffle 自己要处理的数据，边 fetch 数据边进行 aggregate 以及后续的 mapPartitions() 操作，最后进行 mapValues() 和 count() 计算得到 result。
+- Stage 1 包含 100 个 ShuffleMapTask，每个 task 负责从 cache 中读取 pairs1 的一部分数据并将其进行类似 Hadoop 中 mapper 所做的 partition，最后将 partition 结果写入本地磁盘。
+- Stage 0 包含 36 个 ResultTask，每个 task 首先 shuffle 自己要处理的数据，边 fetch 数据边进行 aggregate 以及后续的 mapPartitions() 操作，最后进行 count() 计算得到 result。
 - task 执行完后，driver 收集每个 task 的执行结果，然后进行 sum()。
 - job 1 结束。
 
