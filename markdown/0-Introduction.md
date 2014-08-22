@@ -51,16 +51,21 @@ Doc Version: 1.0.2.0
 
 文档写作过程中，遇到过一些细节问题，感谢下列同学给予的解答、讨论和帮助：
 
-[@Andrew-Xia](http://weibo.com/u/1410938285)
+- [@Andrew-Xia](http://weibo.com/u/1410938285) 参与讨论了 BlockManager 的实现与 broadcast(rdd) 会出现的情况。
 
-[@CrazyJVM](http://weibo.com/476691290)
+- [@CrazyJVM](http://weibo.com/476691290) 参与讨论了 BlockManager 的实现。
 
-[@王联辉](http://weibo.com/u/1685831233)
+- [@王联辉](http://weibo.com/u/1685831233) 参与讨论了 BlockManager 的实现。
 
-同时感谢下列同学指出文档中的不足和错误：
+同时感谢下列同学指出文档中的不足或错误：
 
-[@Joshuawangzj](http://weibo.com/u/1619689670)
+| Weibo Id | 章节 | 不足或错误 | 修改状态 | 
+|:-----------|:-------------|:-------------|:-------------|
+| [@Joshuawangzj](http://weibo.com/u/1619689670) | Overview | 多个 application 运行时 worker 应该会启动多个 Backend 进程 | 已修改，但需要进一步实验证实。怎么控制 Backend 的个数还不清楚 |
+| [@\_cs\_cm](http://weibo.com/u/1551746393) | Overview | 最新的 groupByKey() 已经取消蕴含的 mapValues() 操作，没有MapValuesRDD 产生了 | 已修改 groupByKey() 相关的 figures 和描述 |
+| [@染染生起](http://weibo.com/u/2859927402) | JobLogicalPlan | FullDepedency 中的 N:N 关系是否属于 NarrowDependency | 将原来的两种 NarrowDependency 描述改为更清楚的三种，已做更详细的说明 |
 
-[@_cs_cm](http://weibo.com/u/1551746393)
 
 特别感谢 [@明风Andy](http://weibo.com/mingfengandy) 同学给予的大力支持。
+
+Special thanks to the rockers (including researchers, developers and users) who participate in the design, implementation and discussion of big data systems.
