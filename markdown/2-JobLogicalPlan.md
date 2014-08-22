@@ -68,20 +68,28 @@ RDD 之间的数据依赖问题实际包括三部分：
 
 ![Dependency](PNGfigures/Dependency.png)
 
-前两个是完全依赖，RDD x 中的 partition 与 parent RDD 中的 partition/partitions 完全相关。最后一个是部分依赖，RDD x 中的 partition 只与 parent RDD 中的 partition 一部分数据相关，另一部分数据与 RDD x 中的其他 partition 相关。
+前三个是完全依赖，RDD x 中的 partition 与 parent RDD 中的 partition/partitions 完全相关。最后一个是部分依赖，RDD x 中的 partition 只与 parent RDD 中的 partition 一部分数据相关，另一部分数据与 RDD x 中的其他 partition 相关。
 
-在 Spark 中，完全依赖被称为 NarrowDependency，部分依赖被称为 ShuffleDependency（其实 ShuffleDependency 跟 MapReduce 中 shuffle 的数据依赖相同。mapper 将其 output 进行 partition，然后每个 reducer 会将所有 mapper 输出中属于自己的 partition 通过 HTTP fetch 得到）。第一种 1:1 的情况被称为 OneToOneDependency。第二种 N:1 的情况被称为普通 NarrowDependency，具体 RDD x 中的每个 partitoin 对应的关系是 1:1 还是 N:1，是由 RDD x 中的 `getParents(partition id)` 决定（下图中某些例子会详细介绍）。还有一种 RangeDependency 的完全依赖，不过该依赖目前只在 UnionRDD 中使用，下面会介绍。
+在 Spark 中，完全依赖被称为 NarrowDependency，部分依赖被称为 ShuffleDependency。其实 ShuffleDependency 跟 MapReduce 中 shuffle 的数据依赖相同（mapper 将其 output 进行 partition，然后每个 reducer 会将所有 mapper 输出中属于自己的 partition 通过 HTTP fetch 得到）。
+
+- 第一种 1:1 的情况被称为 OneToOneDependency。
+- 第二种 N:1 的情况被称为 N:1 NarrowDependency。
+- 第三种 N:N 的情况被称为 N:N NarrowDependency。不属于前两种情况的完全依赖都属于这个类别。
+- 第四种被称为 ShuffleDependency。
+
+对于 NarrowDependency，具体 RDD x 中的 partitoin i 依赖 parrent RDD 中一个 partition 还是多个 partitions，是由 RDD x 中的 `getParents(partition i)` 决定（下图中某些例子会详细介绍）。还有一种 RangeDependency 的完全依赖，不过该依赖目前只在 UnionRDD 中使用，下面会介绍。
 
 所以，总结下来 partition 之间的依赖关系如下：
 - NarrowDependency (**使用黑色实线或黑色虚线箭头表示**)
 	- OneToOneDependency (1:1)
- 	- NarrowDependency (N:1)	 
+ 	- NarrowDependency (N:1)	
+	- NarrowDependency (N:N) 
 	- RangeDependency (只在 UnionRDD 中使用)
 - ShuffleDependency (**使用红色箭头表示**)
 
-> 之所以要划分 NarrowDependency 和 ShuffleDependency 是为了生成物理执行图，下一章会具体介绍。
+之所以要划分 NarrowDependency 和 ShuffleDependency 是为了生成物理执行图，下一章会具体介绍。
 > 
-> 需要注意的是第二种 NarrowDependency (N:1) 比较少在两个 RDD 之间出现。因为如果 parent RDD 中的 partition 同时被 child RDD 中多个 partitions 依赖，那么最后生成的依赖图往往与 ShuffleDependency 一样。只是对于 parent  RDD 中的 partition 来说一个是完全依赖，一个是部分依赖，而箭头数没有少。所以 Spark 定义的 NarrowDepedency 其实是 “each partition of the parent RDD is used by at most one partition of the child RDD“，但这也并不意味着必须是 1:1 依赖，参见下面的 cartesian(otherRDD)。这里描述的比较乱，其实看懂下面的几个典型的 RDD 依赖即可。
+> 需要注意的是第三种 NarrowDependency (N:N) 很少在两个 RDD 之间出现。因为如果 parent RDD 中的 partition 同时被 child RDD 中多个 partitions 依赖，那么最后生成的依赖图往往与 ShuffleDependency 一样。只是对于 parent  RDD 中的 partition 来说一个是完全依赖，一个是部分依赖，而箭头数没有少。所以 Spark 定义的 NarrowDepedency 其实是 “each partition of the parent RDD is used by at most one partition of the child RDD“，也就是只有 OneToOneDependency (1:1) 和 NarrowDependency (N:1) 两种情况。但是，自己设计的奇葩 RDD 确实可以呈现出 NarrowDependency (N:N)  的情况。这里描述的比较乱，其实看懂下面的几个典型的 RDD 依赖即可。
 
 **如何计算得到 RDD x 中的数据（records）？**下图展示了 OneToOneDependency 的数据依赖，虽然 partition 和 partition 之间是 1:1，但不代表计算 records 的时候也是读一个 record 计算一个 record。 下图右边上下两个 pattern 之间的差别类似于下面两个程序的差别：
 
@@ -198,7 +206,7 @@ coalesce() 可以将 parent RDD 的 partition 个数进行调整，比如从 5 �
 
 coalesce() 的核心问题是**如何确立 CoalescedRDD 中 partition 和其 parent RDD 中 partition 的关系。**
 
-- coalesce(shuffle = false) 时，由于不能进行 shuffle，**问题变为 parent RDD 中哪些partition 可以合并在一起。**合并因素除了要考虑 partition 中元素个数外，还要考虑 locality 及 balance 的问题。因此，Spark 设计了一个非常复杂的算法来解决该问题（算法部分我还没有深究）。
+- coalesce(shuffle = false) 时，由于不能进行 shuffle，**问题变为 parent RDD 中哪些partition 可以合并在一起。**合并因素除了要考虑 partition 中元素个数外，还要考虑 locality 及 balance 的问题。因此，Spark 设计了一个非常复杂的算法来解决该问题（算法部分我还没有深究）。注意`Example: a.coalesce(3, shuffle = false)`展示了 N:1 的 NarrowDependency。
 - coalesce(shuffle = true) 时，**由于可以进行 shuffle，问题变为如何将 RDD 中所有 records 平均划分到 N 个 partition 中。**很简单，在每个 partition 中，给每个 record 附加一个 key，key 递增，这样经过 hash(key) 后，key 可以被平均分配到不同的 partition 中，类似 Round-robin 算法。在第二个例子中，RDD a 中的每个元素，先被加上了递增的 key（如 MapPartitionsRDD 第二个 partition 中 (1, 3) 中的 1）。在每个 partition 中，第一个元素 (Key, Value) 中的 key 由 `(new Random(index)).nextInt(numPartitions)` 计算得到，index 是该 partition 的索引，numPartitions 是 CoalescedRDD 中的 partition 个数。接下来元素的 key 是递增的，然后 shuffle 后的 ShuffledRDD 可以得到均分的 records，然后经过复杂算法来建立 ShuffledRDD 和 CoalescedRDD 之间的数据联系，最后过滤掉 key，得到 coalesce 后的结果 MappedRDD。
 
 **10) repartition(numPartitions)**
