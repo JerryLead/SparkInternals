@@ -23,8 +23,13 @@
 		
 - 每个 Worker 上存在一个或者多个 ExecutorBackend 进程。每个进程包含一个 Executor 对象，该对象持有一个线程池，每个线程可以执行一个 task。
 - 每个 application 包含一个 driver 和多个 executors，每个 executor 里面运行的 tasks 都属于同一个 application。
-- 在 Standalone 版本中，ExecutorBackend 被实例化成 CoarseGrainedExecutorBackend 进程。在我部署的集群中每个 Worker 只运行了一个 CoarseGrainedExecutorBackend 进程，没有发现如何配置多个 CoarseGrainedExecutorBackend 进程。（应该是运行多个 applications 的时候会产生多个进程，这个我还没有实验）
+- 在 Standalone 版本中，ExecutorBackend 被实例化成 CoarseGrainedExecutorBackend 进程。
+
+	> 在我部署的集群中每个 Worker 只运行了一个 CoarseGrainedExecutorBackend 进程，没有发现如何配置多个 CoarseGrainedExecutorBackend 进程。（应该是运行多个 applications 的时候会产生多个进程，这个我还没有实验，）
+	>
+	> 想了解  Worker 和 Executor 的关系详情，可以参阅  [@OopsOutOfMemory](http://weibo.com/oopsoom) 同学写的 [Spark Executor Driver资源调度小结](http://blog.csdn.net/oopsoom/article/details/38763985) 。
 - Worker 通过持有 ExecutorRunner 对象来控制 CoarseGrainedExecutorBackend 的启停。
+	
 
 了解了部署图之后，我们先给出一个 job 的例子，然后概览一下 job 如何生成与运行。
 
@@ -163,3 +168,9 @@ object GroupByTest {
 6. cache机制
 7. broadcast 机制
 
+
+Hi，文章写得很赞～关于OverView中如何配置多个Backend进程的问题：在Worker Actor中，每次LaunchExecutor会创建一个Backend进程，它们是1对1的关系。也就是说集群里启动多少Executor实例就有多少Backend进程。
+
+Backend个数发生变化情况：1、启动一个新的Application（每个APP都会launceExecutor，此时会生成此进程）2、还可以通过设置SPARK\_WORKER\_INSTANCES参数来增加Backend个数。图可以依此稍做改动。
+
+Backend进程是SparkContext初始化taskcScheduler，taskcScheduler初始化SparkDeploySchedulerBackend里appDesc里的command...顺藤摸瓜即可。。CoarseGrainedExecutorBackend

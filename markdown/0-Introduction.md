@@ -57,7 +57,13 @@ Doc Version: 1.0.2.0
 
 - [@王联辉](http://weibo.com/u/1685831233) 参与讨论了 BlockManager 的实现。
 
-同时感谢下列同学指出文档中的不足或错误：
+感谢下列同学对文档内容的补充：
+
+| Weibo Id | 章节 | 补充内容 | 修改状态 | 
+|:-----------|:-------------|:-------------|:-------------|
+| [@OopsOutOfMemory](http://weibo.com/oopsoom) | Overview | workers 与 executors 的关系及 [Spark Executor Driver资源调度小结](http://blog.csdn.net/oopsoom/article/details/38763985) | 由于这部分内容的相关实现还在不断 update，本文暂不作结论性总结，已添加详情链接到该同学的 blog |
+
+感谢下列同学指出文档中的不足或错误：
 
 | Weibo Id | 章节 | 不足或错误 | 修改状态 | 
 |:-----------|:-------------|:-------------|:-------------|
