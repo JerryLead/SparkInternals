@@ -123,7 +123,7 @@ object GroupByTest {
 - 执行 RDD 上的 transformation 操作（这里是 flatMap）以后，生成 FlatMappedRDD，其中每个 partition 包含一个 Array[(Int, Array[Byte])]。
 - 第一个 count() 执行时，先在每个 partition 上执行 count，然后执行结果被发送到 driver，最后在 driver 端进行 sum。
 - 由于 FlatMappedRDD 被 cache 到内存，因此这里将里面的 partition 都换了一种颜色表示。
-- groupByKey 产生了后面三个 RDD，为什么产生这三个在后面章节讨论。
+- groupByKey 产生了后面两个 RDD，为什么产生这两个在后面章节讨论。
 - 如果 job 需要 shuffle，一般会产生 ShuffledRDD。该 RDD 与前面的 RDD 的关系类似于 Hadoop 中 mapper 输出数据与 reducer 输入数据之间的关系。
 - MapPartitionsRDD 里包含 groupByKey() 的结果。
 - 最后将 MapPartitionsRDD 中的 每个value（也就是Array[Byte]）都转换成 Iterable 类型。
@@ -168,9 +168,3 @@ object GroupByTest {
 6. cache机制
 7. broadcast 机制
 
-
-Hi，文章写得很赞～关于OverView中如何配置多个Backend进程的问题：在Worker Actor中，每次LaunchExecutor会创建一个Backend进程，它们是1对1的关系。也就是说集群里启动多少Executor实例就有多少Backend进程。
-
-Backend个数发生变化情况：1、启动一个新的Application（每个APP都会launceExecutor，此时会生成此进程）2、还可以通过设置SPARK\_WORKER\_INSTANCES参数来增加Backend个数。图可以依此稍做改动。
-
-Backend进程是SparkContext初始化taskcScheduler，taskcScheduler初始化SparkDeploySchedulerBackend里appDesc里的command...顺藤摸瓜即可。。CoarseGrainedExecutorBackend
