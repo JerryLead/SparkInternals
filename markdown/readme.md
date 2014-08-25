@@ -70,6 +70,7 @@ Doc Version: 1.0.2.0
 | [@Joshuawangzj](http://weibo.com/u/1619689670) | Overview | 多个 application 运行时 worker 应该会启动多个 Backend 进程 | 已修改，但需要进一步实验证实。怎么控制 Backend 的个数还不清楚 |
 | [@\_cs\_cm](http://weibo.com/u/1551746393) | Overview | 最新的 groupByKey() 已经取消蕴含的 mapValues() 操作，没有MapValuesRDD 产生了 | 已修改 groupByKey() 相关的 figures 和描述 |
 | [@染染生起](http://weibo.com/u/2859927402) | JobLogicalPlan | FullDepedency 中的 N:N 关系是否属于 NarrowDependency | 将原来的两种 NarrowDependency 描述改为更清楚的三种，已做更详细的说明 |
+| [@zzl0](https://github.com/zzl0) | 前四章 | 很多 typos，比如 “groupByKey 产生了后面三个 RDD”，应该是两个。详见 [pull request](https://github.com/JerryLead/SparkInternals/pull/3/files)。 | 已经全部修改 | 
 
 
 特别感谢 [@明风Andy](http://weibo.com/mingfengandy) 同学给予的大力支持。
