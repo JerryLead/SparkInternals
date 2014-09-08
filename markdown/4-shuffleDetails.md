@@ -1,8 +1,8 @@
-# Shuflfe 过程
+# Shuffle 过程
 
 上一章里讨论了 job 的物理执行图，也讨论了流入 RDD 中的 records 是怎么被 compute() 后流到后续 RDD 的，同时也分析了 task 是怎么产生 result，以及 result 怎么被收集后计算出最终结果的。然而，我们还没有讨论**数据是怎么通过 ShuffleDependency 流向下一个 stage 的？**
 
-## 对比 Hadoop MapReduce 和 Spark 的 Shuflfe 过程
+## 对比 Hadoop MapReduce 和 Spark 的 Shuffle 过程
 如果熟悉 Hadoop MapReduce 中的 shuffle 过程，可能会按照 MapReduce 的思路去想象 Spark 的 shuffle 过程。然而，它们之间有一些区别和联系。
 
 **从 high-level 的角度来看，两者并没有大的差别。**都是将 mapper（Spark 里是 ShuffleMapTask）的输出进行 partition，不同的 partition 送到不同的  reducer（Spark 里 reducer 可能是下一个 stage 里的 ShuffleMapTask，也可能是 ResultTask）。Reducer 以内存作缓冲区，边 shuffle 边 aggregate 数据，等到数据 aggregate 好以后进行 reduce() （Spark 里可能是后续的一系列操作）。
@@ -13,7 +13,7 @@
 
 如果我们将 map 端划分数据、持久化数据的过程称为 shuffle write，而将 reducer 读入数据、aggregate 数据的过程称为 shuffle read。那么在 Spark 中，**问题就变为怎么在 job 的逻辑或者物理执行图中加入 shuffle write 和 shuffle read 的处理逻辑？以及两个处理逻辑应该怎么高效实现？**
 
-## Shufle write
+## Shuffle write
 
 由于不要求数据有序，shuffle write 的任务很简单：将数据 partition 好，并持久化。之所以要持久化，一方面是要减少内存存储空间压力，另一方面也是为了 fault-tolerance。
 
@@ -38,7 +38,7 @@ ShuffleMapTask 的执行过程很简单：先利用 pipeline 计算得到 finalR
 
 可以明显看出，在一个 core 上连续执行的 ShuffleMapTasks 可以共用一个输出文件 ShuffleFile。先执行完的 ShuffleMapTask 形成 ShuffleBlock i，后执行的 ShuffleMapTask 可以将输出数据直接追加到 ShuffleBlock i 后面，形成 ShuffleBlock i'，每个 ShuffleBlock 被称为 **FileSegment**。下一个 stage 的 reducer 只需要 fetch 整个 ShuffleFile 就行了。这样，每个 worker 持有的文件数降为 cores * R。FileConsolidation 功能可以通过`spark.shuffle.consolidateFiles=true`来开启。
 
-## Shufle read
+## Shuffle read
 先看一张包含 ShuffleDependency 的物理执行图，来自 reduceByKey：
 
 ![reduceByKey](PNGfigures/reduceByKeyStage.png)
@@ -75,7 +75,7 @@ MapReduce 可以在 process 函数里面可以定义任何数据结构，也可�
 
 至此，我们已经讨论了 shuffle write 和 shuffle read 设计的核心思想、算法及某些实现。接下来，我们深入一些细节来讨论。
 
-## 典型 transformation() 的 shufle read
+## 典型 transformation() 的 shuffle read
 
 ###  1. reduceByKey(func) 
 上面初步介绍了 reduceByKey() 是如何实现边 fetch 边 reduce() 的。需要注意的是虽然 Example(WordCount) 中给出了各个 RDD 的内容，但一个 partition 里面的 records 并不是同时存在的。比如在 ShuffledRDD 中，每 fetch 来一个 record 就立即进入了 func 进行处理。MapPartitionsRDD 中的数据是 func 在全部 records 上的处理结果。从 record 粒度上来看，reduce()  可以表示如下：
@@ -139,7 +139,7 @@ sortByKey() 中 ShuffledRDD => MapPartitionsRDD 的处理逻辑是：将 shuffle
 
 coalesce() 虽然有 ShuffleDependency，但不需要对 shuffle 过来的 records 进行 aggregate，所以没有建立 HashMap。每 shuffle 一个 record，就直接流向 CoalescedRDD，进而流向 MappedRDD 中。
 
-## Shufle read 中的 HashMap
+## Shuffle read 中的 HashMap
 HashMap 是 Spark shuffle read 过程中频繁使用的、用于 aggregate 的数据结构。Spark 设计了两种：一种是全内存的 AppendOnlyMap，另一种是内存＋磁盘的 ExternalAppendOnlyMap。下面我们来分析一下**两者特性及内存使用情况**。
 
 ### 1. AppendOnlyMap
