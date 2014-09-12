@@ -72,6 +72,7 @@ Doc Version: 1.0.2.0
 | [@染染生起](http://weibo.com/u/2859927402) | JobLogicalPlan | FullDepedency 中的 N:N 关系是否属于 NarrowDependency | 将原来的两种 NarrowDependency 描述改为更清楚的三种，已做更详细的说明 |
 | [@zzl0](https://github.com/zzl0) | 前四章 | 很多 typos，比如 “groupByKey 产生了后面三个 RDD”，应该是两个。详见 [pull request](https://github.com/JerryLead/SparkInternals/pull/3/files)。 | 已经全部修改 | 
 | [@左手牵右手TEL](http://weibo.com/w397090770) | Cache 和 Broadcast 两章 | 很多 typos | 已经全部修改 | 
+| [@cloud-fan](https://github.com/cloud-fan) | JobLogicalPlan | Cogroup() 图中的某些剪头应该是红色的 | 已经全部修改 | 
 
 特别感谢 [@明风Andy](http://weibo.com/mingfengandy) 同学给予的大力支持。
 
