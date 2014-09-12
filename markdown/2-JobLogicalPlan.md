@@ -131,7 +131,7 @@ ParallelCollectionRDD 是最基础的 RDD，直接从 local 数据结构 create 
 ```scala
 val pairs = sc.parallelize(List(1, 2, 3, 4, 5), 3)
 ```
-生成的 pairs 就是 ParallelCollectionRDD。 
+生成的 pairs 就是 ParallelCollectionRDD。  
 
 
 **2) reduceyByKey(func, numPartitions)**
