@@ -73,6 +73,7 @@ Doc Version: 1.0.2.0
 | [@zzl0](https://github.com/zzl0) | 前四章 | 很多 typos，比如 “groupByKey 产生了后面三个 RDD”，应该是两个。详见 [pull request](https://github.com/JerryLead/SparkInternals/pull/3/files)。 | 已经全部修改 | 
 | [@左手牵右手TEL](http://weibo.com/w397090770) | Cache 和 Broadcast 两章 | 很多 typos | 已经全部修改 | 
 | [@cloud-fan](https://github.com/cloud-fan) | JobLogicalPlan | Cogroup() 图中的某些剪头应该是红色的 | 已经全部修改 | 
+| [@CrazyJvm](http://weibo.com/476691290) | Shuffle details |  从 Spark1.1开始spark.shuffle.file.buffer.kb的默认值为32k，而不是100k  | 已经全部修改 | 
 
 特别感谢 [@明风Andy](http://weibo.com/mingfengandy) 同学给予的大力支持。
 
