@@ -240,6 +240,6 @@ combineByKey() 的定义如下：
 
 RDD 本身的依赖关系由 transformation() 生成的每一个 RDD 本身语义决定。如 CoGroupedRDD 依赖于所有参加 cogroup() 的 RDDs。
 
-RDD 中 partition 依赖关系分为 NarrowDependency 和 ShuffleDependency。前者是完全伊依赖，后者是部分依赖。NarrowDependency 里面又包含多种情况，只有前后两个 RDD 的 partition 个数以及 partitioner 都一样，才会出现 NarrowDependency。
+RDD 中 partition 依赖关系分为 NarrowDependency 和 ShuffleDependency。前者是完全依赖，后者是部分依赖。NarrowDependency 里面又包含多种情况，只有前后两个 RDD 的 partition 个数以及 partitioner 都一样，才会出现 NarrowDependency。
 
 从数据处理逻辑的角度来看，MapReduce 相当于 Spark 中的 map() + reduceByKey()，但严格来讲 MapReduce 中的 reduce() 要比 reduceByKey() 的功能强大些，详细差别会在 Shuffle details 一章中继续讨论。
