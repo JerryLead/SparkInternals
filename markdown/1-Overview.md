@@ -139,7 +139,7 @@ object GroupByTest {
 
 可以看到 GroupByTest 这个 application 产生了两个 job，第一个 job 由第一个 action（也就是 `pairs1.count`）触发产生，分析一下第一个 job：
 
-- 整个 job 只包含 1 个 stage。
+- 整个 job 只包含 1 个 stage（不明白什么是stage没关系，后面章节会解释，这里只需知道有这样一个概念）。
 - Stage 0 包含 100 个 ResultTask。
 - 每个 task 先计算 flatMap，产生 FlatMappedRDD，然后执行 action() 也就是 count()，统计每个 partition 里 records 的个数，比如 partition 99 里面只含有 9 个 records。
 - 由于 pairs1 被声明要进行 cache，因此在 task 计算得到 FlatMappedRDD 后会将其包含的 partitions 都 cache 到 executor 的内存。
