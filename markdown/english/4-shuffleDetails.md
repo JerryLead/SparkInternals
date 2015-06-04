@@ -41,7 +41,7 @@ It's clear that from the above diagram, consecutive `ShuffleMapTask`s executed i
 ## Shuffle Read
 Let's check a physical plan of `reduceBykey`, which contains `ShuffleDependency`:
 
-![reduceByKey](PNGfigures/reduceByKeyStage.png)
+![reduceByKey](../PNGfigures/reduceByKeyStage.png)
 
 Intuitively, we need to fetch the data of `MapPartitionRDD` to be able to evaluate `ShuffleRDD`. Then comes the problems:
 
