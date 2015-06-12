@@ -37,6 +37,7 @@ We start from the creation of a Spark job, and then discuss its execution. Final
 8. Job Scheduling TODO
 9. Fault-tolerance TODO
 
+Chinses Verison is at markdown/.
 
 The documentation is written in markdown. The pdf version is also available [here](https://github.com/JerryLead/SparkInternals/tree/master/pdf).
 
