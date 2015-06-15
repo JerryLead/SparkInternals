@@ -7,8 +7,8 @@ Doc Version: 1.0.2.0
 | Weibo/Twitter ID | Name | Contributions |
 |:-----------|:-------------|:-------------|
 |[@JerryLead](http://weibo.com/jerrylead) | Lijie Xu | Author of the original Chinese version, and English version update |
-|[@juhanlol](https://twitter.com/juhanlol) | Han JU | Author of the English version (Chapter 0, 1, 3, 4, and 7) |
-|[@invkrh](https://twitter.com/invkrh) | Hao Ren | Author of the English version (Chapter 2 and 6)|
+|[@juhanlol](https://twitter.com/juhanlol) | Han JU | English translation and update (Chapter 0, 1, 3, 4, and 7) |
+|[@invkrh](https://twitter.com/invkrh) | Hao Ren | English translation and update (Chapter 2 and 6)|
 
 ## Introduction
 
@@ -28,7 +28,7 @@ I haven't been writing such complete documentation for a while. Last time it was
 We start from the creation of a Spark job, and then discuss its execution. Finally, we dive into some related system modules and features.
 
 1. [Overview](https://github.com/JerryLead/SparkInternals/blob/master/EnglishVersion/1-Overview.md) Overview of Apache Spark
-2. [Job logical plan](https://github.com/JerryLead/SparkInternals/blob/master/markdown/english/2-JobLogicalPlan.md) Logical plan of a job (data dependency graph)
+2. [Job logical plan](https://github.com/JerryLead/SparkInternals/blob/master/EnglishVersion/2-JobLogicalPlan.md) Logical plan of a job (data dependency graph)
 3. [Job physical plan](https://github.com/JerryLead/SparkInternals/blob/master/markdown/english/3-JobPhysicalPlan.md) Physical plan
 4. [Shuffle details](https://github.com/JerryLead/SparkInternals/blob/master/markdown/english/4-shuffleDetails.md) Shuffle process
 5. [Architecture](https://github.com/JerryLead/SparkInternals/blob/master/markdown/english/5-Architecture.md) Coordination of system modules in job execution
