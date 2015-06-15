@@ -8,7 +8,7 @@ Doc Version: 1.0.2.0
 |:-----------|:-------------|:-------------|
 |[@JerryLead](http://weibo.com/jerrylead) | Lijie Xu | Author of the original Chinese version, and English version update |
 |[@juhanlol](https://twitter.com/juhanlol) | Han JU | English translation and update (Chapter 0, 1, 3, 4, and 7) |
-|[@invkrh](https://twitter.com/invkrh) | Hao Ren | English translation and update (Chapter 2 and 6)|
+|[@invkrh](https://twitter.com/invkrh) | Hao Ren | English translation and update (Chapter 2, 5, and 6)|
 
 ## Introduction
 
