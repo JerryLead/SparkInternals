@@ -43,15 +43,15 @@ The documentation is written in markdown. The pdf version is also available [her
 
 If you're under Max OS X, I recommand [MacDown](http://macdown.uranusjr.com/) with a github theme for reading.
 
-## Gitbook
+## Gitbook (Chinese version)
 
 Thanks [@Yourtion](https://github.com/yourtion) for creating the gitbook version.
 
-Online reading (in Chinese) http://spark-internals.books.yourtion.com/
+Online reading  http://spark-internals.books.yourtion.com/
 
 Downloads
 
-- PDF https://www.gitbook.com/download/pdf/book/yourtion/sparkinternals/details
+- PDF https://www.gitbook.com/book/yourtion/sparkinternals/details
 - EPUB https://www.gitbook.com/download/epub/book/yourtion/sparkinternals
 - MOBI https://www.gitbook.com/download/mobi/book/yourtion/sparkinternals
 
