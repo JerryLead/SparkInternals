@@ -7,8 +7,8 @@ Doc Version: 1.0.2.0
 | Weibo/Twitter ID | Name | Contributions |
 |:-----------|:-------------|:-------------|
 |[@JerryLead](http://weibo.com/jerrylead) | Lijie Xu | Author of the original Chinese version, and English version update |
-|[@juhanlol](https://twitter.com/juhanlol) | Han JU | English translation and update (Chapter 0, 1, 3, 4, and 7) |
-|[@invkrh](https://twitter.com/invkrh) | Hao Ren | English translation and update (Chapter 2, 5, and 6)|
+|[@juhanlol](https://twitter.com/juhanlol) | Han JU | English version and update (Chapter 0, 1, 3, 4, and 7) |
+|[@invkrh](https://twitter.com/invkrh) | Hao Ren | English version and update (Chapter 2, 5, and 6)|
 
 ## Introduction
 
@@ -42,6 +42,18 @@ Chinses Verison is at markdown/.
 The documentation is written in markdown. The pdf version is also available [here](https://github.com/JerryLead/SparkInternals/tree/master/pdf).
 
 If you're under Max OS X, I recommand [MacDown](http://macdown.uranusjr.com/) with a github theme for reading.
+
+## Gitbook
+
+Thanks [@Yourtion](https://github.com/yourtion) for creating the gitbook version.
+
+Online reading (in Chinese) http://spark-internals.books.yourtion.com/
+
+Downloads
+
+- PDF https://www.gitbook.com/download/pdf/book/yourtion/sparkinternals/details
+- EPUB https://www.gitbook.com/download/epub/book/yourtion/sparkinternals
+- MOBI https://www.gitbook.com/download/mobi/book/yourtion/sparkinternals
 
 ## Examples
 I've created some examples to debug the system during the writing, they are avaible under [SparkLearning/src/internals](https://github.com/JerryLead/SparkLearning/tree/master/src/internals).
