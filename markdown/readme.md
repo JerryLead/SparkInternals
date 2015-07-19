@@ -52,7 +52,7 @@ Online reading  http://spark-internals.books.yourtion.com/
 
 Downloads
 
-- PDF https://www.gitbook.com/book/yourtion/sparkinternals/details
+- PDF https://www.gitbook.com/download/pdf/book/yourtion/sparkinternals
 - EPUB https://www.gitbook.com/download/epub/book/yourtion/sparkinternals
 - MOBI https://www.gitbook.com/download/mobi/book/yourtion/sparkinternals
 
