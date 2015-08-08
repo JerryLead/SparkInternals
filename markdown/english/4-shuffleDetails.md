@@ -84,7 +84,7 @@ Now we have discussed the main ideas behind shuffle write and shuffle read as we
 
 ### `reduceByKey(func)`
 
-We have briefly talked about the fetch and reduce process of `reduceByKey()`. Note that for a RDD, not all its data is present in the memory at a given time. The processing is always on a record basis. Processed record is rejected if possible. On a record level perspective, the `reduce()` logic can be shown as below:
+We have briefly talked about the fetch and reduce process of `reduceByKey()`. Note that for an RDD, not all its data is present in the memory at a given time. The processing is always on a record basis. Processed record is rejected if possible. On a record level perspective, the `reduce()` logic can be shown as below:
 
 ![shuffle-reduce](../PNGfigures/reduceByKeyRecord.png)
 
