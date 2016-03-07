@@ -1,6 +1,6 @@
 ## Overview
 
-This chapter aims to answer the following questions: 
+This chapter aims to answer the following questions:
 
 **Q1: After a successful deployment, what are the running services in each node?**
 
@@ -31,7 +31,7 @@ We can see from the deployment diagram (Standalone version):
   - In Standalone deployment mode, ExecutorBackend is instantiated as CoarseGrainedExecutorBackend.
 
     > In my cluster there's only one CoarseGrainedExecutorBackend process on each worker node and I didn't manage to configure multiple CoarseGrainedExecutorBackend processes on each worker node (my guess is that there'll be multiple CoarseGrainedExecutorBackend process when multiple applications are running, which needs to be confirmed).
-    
+
     > Check out this blog (in Chinese) [Summary on Spark Executor Driver Resource Scheduling](http://blog.csdn.net/oopsoom/article/details/38763985) by [@OopsOutOfMemory](http://weibo.com/oopsoom), if you want to know more about the relationship between Worker and Executor.
 
   - Worker manages each CoarseGrainedExecutorBackend process thourgh an ExecutorRunner instance (Object).
@@ -102,7 +102,7 @@ Since this is a simple application, let's estimate the runtime data size in each
   4. Each mapper creats an `arr1: Array[(Int, Byte[])]`, which has `numKVPairs` elements. Each  `Int` is a random integer, and each byte array's size is `valSize`. We can estimate `Size(arr1) = numKVPairs * (4 + valSize) = 10MB`, so that `Size(pairs1) = numMappers * Size(arr1) ＝1000MB`.
   5. Each mapper is instructed to cache its `arr1` array into the memory.
   6. The action count() is applied to sum the number of elements in  `arr1` in all mappers, the result is `numMappers * numKVPairs = 1,000,000`. This action triggers the caching of `arr1`s.
-  7. `groupByKey` operation is performed on cached `pairs1`. The reducer number (a.k.a., partition number) is `numReducers`. Theoretically, if hash(key) is even distributed, each reducer will receive `numMappers * numKVPairs / numReducer ＝ 27,777` pairs of `(Int, Array[Byte])`, with a size of `Size(pairs1) / numReducer = 27MB`.
+  7. `groupByKey` operation is performed on cached `pairs1`. The reducer number (a.k.a., partition number) is `numReducers`. Theoretically, if hash(key) is evenly distributed, each reducer will receive `numMappers * numKVPairs / numReducer ＝ 27,777` pairs of `(Int, Array[Byte])`, with a size of `Size(pairs1) / numReducer = 27MB`.
   8. Reducer aggregates the records with the same Int key, the result is `(Int, List(Byte[], Byte[], ..., Byte[]))`.
   9. Finally, a `count()` action sums up the record number in each reducer, the final result is actually the number of distinct integers in `paris1`.
 
@@ -157,8 +157,8 @@ The second job is triggered by `pairs1.groupByKey(numReducers).count`:
 
   - This job has 2 stages.
   - Stage 0 contains 100 ShuffleMapTask, each task reads a partition of `paris1` from the cache, repartitions it, and then write the repartitioned results into local disk. This step is similar to partitioning map outputs in Hadoop.
-  - Stage 1 contains 36 ResultTasks. Each task fetches and shuffles the data that it needs to process. It fetches the data, aggregates the data, and performes mapPartitions() operation in a pipeline style. Finally, count() is applied to get the result. 
-  - After the ResultTasks finish, the driver collects the tasks' results and sum them up.
+  - Stage 1 contains 36 ResultTasks. Each task fetches and shuffles the data that it needs to process. It fetches the data, aggregates the data, and performes mapPartitions() operation in a pipeline style. Finally, count() is applied to get the result.
+  - After the ResultTasks finish, the driver collects the tasks' results and sums them up.
   - Job 1 completes.
 
 We can see that the physical plan is not simple. A Spark application can contain multiple jobs, each job could have multiple stages, and each stage has multiple tasks. **In later chapters, we'll detail how the jobs, stages and tasks are generated**

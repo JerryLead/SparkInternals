@@ -145,7 +145,7 @@ We can see that the GroupByTest application generates 2 jobs, the first job is t
   - Stage 0 has 100 ResultTask
   - Each task computes flatMap, generating FlatMappedRDD, then executes the action (`count()`), count the record number in each partition. For example in partition 99 there's only 9 records.
   - Since `pairs1` is instructed to be cached, the tasks will cache the partitions of FlatMappedRDD inside the executor's memory space.
-  - After the tasks' execution, drive collects the results of tasks and sum them up
+  - After the tasks' execution, drive collects the results of tasks and sums them up
   - Job 0 completes
 
 The second job is triggered by `pairs1.groupByKey(numReducers).count`:

@@ -9,13 +9,13 @@ The code of this application is attached at the end of this chapter.
 
 **How to properly determine the stages and tasks within such a complex data dependency graph?**
 
-An intuitive idea is to associate one RDD and its patrent RDD to form a stage. In this way, each arrow in the above figure will become a task. For the case of 2 RDDs aggregate into one, we may create a stage with these 3 RDDs. This strategy could be a working solution, but it's not efficient. It has a subtle, but severe problem: **lots of intermediate data needs to be stored**. For a physical task, its result will be stored either on local disk, or in the memory, or both. If a task is generated for each arrow in the data dependency graph, the system needs to store data of all the RDDs. It will cost a lot.
+An intuitive idea is to associate one RDD and its preceding RDD to form a stage. In this way, each arrow in the above figure will become a task. For the case of 2 RDDs aggregate into one, we may create a stage with these 3 RDDs. This strategy could be a working solution, but it's not efficient. It has a subtle, but severe problem: **lots of intermediate data needs to be stored**. For a physical task, its result will be stored either on local disk, or in the memory, or both. If a task is generated for each arrow in the data dependency graph, the system needs to store data of all the RDDs. It will cost a lot.
 
 If we examine the logical plan more closely, we may find out that in each RDD, the partitions are independent from each other. That is to say, inside each RDD, the data within a partition will not interfere others. With this observation, an aggressive idea is to consider the whole diagram as a single stage and create one physical task for each partition of the final RDD (`FlatMappedValuesRDD`). The following diagram illustrates this idea:
 
 ![ComplexTask](../PNGfigures/ComplexTask.png)
 
-All thick arrows in above diagram belong to task1, whose result is the first partition of the final RDD of the job. Note that in order to compute the first partition of the `CoGroupedRDD`, we need to compute all partitions of its preceding RDDs (e.g., all the partitions in UnionRDD) since it's a `ShuffleDependency`. After that, we can compute the `CoGroupedRDD`'s second and third partition using task2 (thin arrows) and task3 (dashed arrows), which are much simpler. 
+All thick arrows in above diagram belong to task1, whose result is the first partition of the final RDD of the job. Note that in order to compute the first partition of the `CoGroupedRDD`, we need to compute all partitions of its preceding RDDs (e.g., all the partitions in UnionRDD) since it's a `ShuffleDependency`. After that, we can compute the `CoGroupedRDD`'s second and third partition using task2 (thin arrows) and task3 (dashed arrows), which are much simpler.
 
 However, there's 2 problems within this idea:
   - The first task is too large. We have to compute all the partitions of the preceding RDDs (i.e., UnionRDD), because of the `ShuffleDependency`.
@@ -41,7 +41,7 @@ Considering `records` as a stream, we can see that no intermediate results need 
 // The third pattern
 def f(records) {
   var result
-  for (record <- records) 
+  for (record <- records)
     result.aggregate(process(record)) // need to store the intermediate result here
   result.iterator // return the iterator of newly-generated [record1, record2, record3]
 }
@@ -61,7 +61,7 @@ Let's go back to our problem with stages and tasks. The main issue of the above 
 
 The strategy for creating stages is to: **check backwards from the final RDD, add each `NarrowDependency` into the current stage, and break out for a new stage when there's a `ShuffleDependency`. In each stage, the task number is determined by the partition number of the last RDD in the stage.**
 
-In above diagram, all thick arrows represent tasks. Since the stages are determined backwards, the last stage's id is 0, stage 1 and stage 2 are both parents to stage 0. **If a stage generates the final result, the tasks in this stage are of type `ResultTask`, otherwise they are `ShuffleMapTask`.** `ShuffleMapTask` gets its name because its results need to be shuffled to the next stage, which is similar to the mappers in Hadoop MapReduce. `ResultTask` can be regarded as reducer (when it gets shuffled data from its parent stages), or mappers (when the current stage has no parents).
+In above diagram, all thick arrows represent tasks. Since the stages are determined backwards, the last stage's id is 0, stage 1 and stage 2 are both parents of stage 0. **If a stage generates the final result, the tasks in this stage are of type `ResultTask`, otherwise they are `ShuffleMapTask`.** `ShuffleMapTask` gets its name because its results need to be shuffled to the next stage, which is similar to the mappers in Hadoop MapReduce. `ResultTask` can be regarded as reducer (when it gets shuffled data from its parent stages), or mapper (when the current stage has no parents).
 
 **One problem remains:** `NarrowDependency` chain can be pipelined, but in our example application, we've showed only `OneToOneDependency` and `RangeDependency`, how about the `NarrowDependency (M:N)`?
 
@@ -159,7 +159,7 @@ The following table shows the typical [action()](http://spark.apache.org/docs/la
 
 Each time there is an `action()` in user's driver program, a job will be created. For example, `foreach()` action will call `sc.runJob(this, (iter: Iterator[T]) => iter.foreach(f)))` to submit a job to the `DAGScheduler`. If there are other `action()`s in the driver program, there will be other jobs submitted. So, we will have as many jobs as the `action()` operations in a driver program. This is why a driver program is called as an application rather than a job.
 
-The last stage of a job generates the job's results. For example in the `GroupByTest` in the first chapter, there's 2 jobs with 2 sets of results. When a job is submitted, the `DAGScheduler` applies the Application-LogicalPlan-PhysicalPlan strategy to figure out the stages, and submit firstly the **stages without parents** for execution. In this process, the number and type of tasks are also determined. A stage is executed after its parent stages' finish.
+The last stage of a job generates the job's results. For example in the `GroupByTest` in the first chapter, there're 2 jobs with 2 sets of results. When a job is submitted, the `DAGScheduler` applies the Application-LogicalPlan-PhysicalPlan strategy to figure out the stages, and submits firstly the **stages without parents** for execution. In this process, the number and type of tasks are also determined. A stage is executed after its parent stages' finish.
 
 ## Details in Job Submission
 
