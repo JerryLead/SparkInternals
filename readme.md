@@ -1,6 +1,6 @@
 # Spark Internals
 
-Spark Version: 1.0.2  
+Spark Version: 1.0.2
 Doc Version: 1.0.2.0
 
 ## Authors
@@ -22,7 +22,7 @@ I'll try my best to keep this documentation up to date with Spark since it's a f
 
 For more academic oriented discussion, please check out Matei's PHD thesis and other related papers. You can also have a look at my blog (in Chinese) [blog](http://www.cnblogs.com/jerrylead/archive/2013/04/27/Spark.html).
 
-I haven't been writing such complete documentation for a while. Last time it was about three years ago when I'm studying Andrew Ng's ML course. I was really motivated at that time! This time I've spent 20+ days on this document, from the summer break till now (August 2014). Most of the time is spent on debugging, drawing diagrams and thinking how to put my ideas in the right way. I hope you find this series helpful.
+I haven't been writing such complete documentation for a while. Last time it was about three years ago when I was studying Andrew Ng's ML course. I was really motivated at that time! This time I've spent 20+ days on this document, from the summer break till now (August 2014). Most of the time is spent on debugging, drawing diagrams and thinking how to put my ideas in the right way. I hope you find this series helpful.
 
 ## Contents
 We start from the creation of a Spark job, and then discuss its execution. Finally, we dive into some related system modules and features.

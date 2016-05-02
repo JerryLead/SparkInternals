@@ -32,18 +32,18 @@ A `transformation()` usually produces a new RDD, but some `transformation()`s ca
 
 Logical plan is essentially a *computing chain*. Every RDD has a `compute()` method, which reads input records (e.g., key/value pairs) from the previous RDD or data source, performs `transformation()`, and then outputs new records.
 
-What RDDs should be produced depends on the computing logic of the `transformation()`. Let's talk about some typical [transformation()](http://spark.apache.org/docs/latest/programming-guide.html#transformations) and their produced RDDs. 
+What RDDs should be produced depends on the computing logic of the `transformation()`. Let's talk about some typical [transformation()](http://spark.apache.org/docs/latest/programming-guide.html#transformations) and their produced RDDs.
 
 We can learn about the meaning of each `transformation()` on Spark site. More details are listed in the following table, where `iterator(split)` denotes *for each record in a partition*. There are some blanks in the table, because they are complex `transformation()` that produce multiple RDDs. They will be detailed soon after.
 
-| Transformation |  Generated RDDs | Compute() | 
+| Transformation |  Generated RDDs | Compute() |
 |:-----|:-------|:---------|
-| **map**(func) | MappedRDD | iterator(split).map(f) | 
-| **filter**(func) | FilteredRDD | iterator(split).filter(f) | 
-| **flatMap**(func) | FlatMappedRDD | iterator(split).flatMap(f) | 
+| **map**(func) | MappedRDD | iterator(split).map(f) |
+| **filter**(func) | FilteredRDD | iterator(split).filter(f) |
+| **flatMap**(func) | FlatMappedRDD | iterator(split).flatMap(f) |
 | **mapPartitions**(func) | MapPartitionsRDD | f(iterator(split)) | |
 | **mapPartitionsWithIndex**(func) | MapPartitionsRDD |  f(split.index, iterator(split)) | |
-| **sample**(withReplacement, fraction, seed) | PartitionwiseSampledRDD | PoissonSampler.sample(iterator(split))  BernoulliSampler.sample(iterator(split)) | 
+| **sample**(withReplacement, fraction, seed) | PartitionwiseSampledRDD | PoissonSampler.sample(iterator(split))  BernoulliSampler.sample(iterator(split)) |
 | **pipe**(command, [envVars]) | PipedRDD | |
 | **union**(otherDataset) |  |  |
 | **intersection**(otherDataset) | | |
@@ -73,10 +73,10 @@ The third question is a bit complex, we need to consider the semantics of `trans
 In Spark, there are two  kinds of data partition dependencies between RDDs:
 -	NarrowDependency (e.g., OneToOneDependency and RangeDependency)
 
-	>	Each partition of the child RDD **fully** depends on a small number of partitions of its parent RDD. **Fully depends** (i.e., **FullDependency**) means that a child partition depends the **entire** parent partition. 
+	>	Each partition of the child RDD **fully** depends on a small number of partitions of its parent RDD. **Fully depends** (i.e., **FullDependency**) means that a child partition depends the **entire** parent partition.
 -	ShuffleDependency (or Wide dependency mentioned in Matei's paper)
 
-	>	Multiple child partitions **partially** depends on a parent partition. **Partially depends** (i.e., **PartialDependency**) means that each child partition depends **a part of** the parent partition. 
+	>	Multiple child partitions **partially** depends on a parent partition. **Partially depends** (i.e., **PartialDependency**) means that each child partition depends **a part of** the parent partition.
 
 For example, `map()` leads to a narrow dependency, while `join()` usually leads to to a wide
 dependencies.
@@ -91,9 +91,9 @@ The two dependencies are illustrated in the following figure.
 
 ![Dependency](../PNGfigures/Dependency.png)
 
-According to the definition, the first three cases are `NarrowDependency` and the last one is `ShuffleDependency`. 
+According to the definition, the first three cases are `NarrowDependency` and the last one is `ShuffleDependency`.
 
-Need to mention that the left one on the second row is a rare case. It is a N:N `NarrowDependency`. Although it looks like ShuffleDependency, it is a full dependency. It can be created in some tricky `transformation()`s. We will not talk about this case, because `NarrowDependency` essentially means **each partition of the parent RDD is used by at most one partition of the child RDD** in Spark source code. 
+Need to mention that the left one on the second row is a rare case. It is a N:N `NarrowDependency`. Although it looks like ShuffleDependency, it is a full dependency. It can be created in some tricky `transformation()`s. We will not talk about this case, because `NarrowDependency` essentially means **each partition of the parent RDD is used by at most one partition of the child RDD** in Spark source code.
 
 In summary, data partition dependencies are listed as below
 - NarrowDependency (black arrow)
@@ -120,7 +120,7 @@ Code of iter.f():
 int[] array = {1, 2, 3, 4, 5}
 for(int i = 0; i < array.length; i++)
     output f(array[i])
-``` 
+```
 Code of f(iter):
 ```java
 int[] array = {1, 2, 3, 4, 5}
@@ -141,7 +141,7 @@ output f(array)
 
 We have talked about `groupByKey`'s dependency before, now we make it more clear.
 
-`groupByKey()` aggregates records with the same key by shuffle. The `compute()` function in `ShuffledRDD` fetches necessary data for its partitions, then performs `mapPartition()` operation in a `OneToOneDependency` style. Finally, `ArrayBuffer` type in the value is casted to `Iterable`. 
+`groupByKey()` aggregates records with the same key by shuffle. The `compute()` function in `ShuffledRDD` fetches necessary data for its partitions, then performs `mapPartition()` operation in a `OneToOneDependency` style. Finally, `ArrayBuffer` type in the value is casted to `Iterable`.
 
 >	`groupByKey()` has no map-side combine, because map-side combine does not reduce the amount of data shuffled and requires all map-side data be inserted into a hash table, leading to too many objects in the Old Gen.
 
@@ -153,7 +153,7 @@ We have talked about `groupByKey`'s dependency before, now we make it more clear
 
 `reduceByKey()` is similar to `reduce()` in MapReduce. The data flow is equivalent. `redcuceByKey` enables map-side combine by default, which is carried out by `mapPartitions()` before shuffle and results in `MapPartitionsRDD`. After shuffle, `aggregate + mapPartitions()` is applied to `ShuffledRDD`. Again, we get a `MapPartitionsRDD`.
 
-**3) distinct(numPartitions)** 
+**3) distinct(numPartitions)**
 
 ![distinct](../PNGfigures/distinct.png)
 
@@ -225,7 +225,7 @@ Here are two examples, in the first one, `RDD 1` and `RDD 2` use `RangePartition
 Need to pay attention to the dependency, each partition in `CartesianRDD` depends 2 **entire** parent RDDs. They are all `NarrowDependency`.
 
 > `CartesianRDD.getDependencies()` returns `rdds: Array(RDD a, RDD b)`. The i-th partition of `CartesianRDD` depends:
--	`a.partitions(i / #partitionA)` 
+-	`a.partitions(i / #partitionA)`
 -	`b.partitions(i % #partitionB)`
 
 **9) coalesce(numPartitions, shuffle = false)**
@@ -235,11 +235,11 @@ Need to pay attention to the dependency, each partition in `CartesianRDD` depend
 `coalesce()` can reorganize partitions, e.g. decrease # of partitions from 5 to 3, or increase from 5 to 10. Need to notice that when `shuffle = false`, we cannot increase partitions, because that will force a shuffle.
 
 To understand `coalesce()`, we need to know **the relationship between `CoalescedRDD`'s partitions and its parent partitions**
- 
+
 -	`coalesce(shuffle = false)`
 	Since shuffle is disabled, what we can do is just to group certain parent partitions. In fact, to achieve a *good* group, there are many factors to take into consideration, e.g. # records in partition, locality, balance, etc. Spark has a rather complicated algorithm to do with that (we will not talk about that for the moment). For example, `a.coalesce(3, shuffle = false)` is essentially a `NarrowDependency` of N:1.
 
-- 	`coalesce(shuffle = true)` 
+- 	`coalesce(shuffle = true)`
 	When shuffle is enabled, `coalesce` simply divides all records of `RDD` into N partitions, which can be done by the following tricky method (like round-robin algorithm):
 	-	for each partition, every record is assigned a key which is an increasing number.
 	-	hash(key) leads to a uniform records distribution on all different partitions.
@@ -276,7 +276,7 @@ There are three important parameters:
 
 Details:
 
--	When some (K, V) records are being pushed to `combineByKey()`, `createCombiner` takes the first record to initialize a combiner of type `C` (e.g., C = V). 
+-	When some (K, V) records are being pushed to `combineByKey()`, `createCombiner` takes the first record to initialize a combiner of type `C` (e.g., C = V).
 -	From then on, `mergeValue` takes every incoming record, `mergeValue(combiner, record.value)`, to update the combiner. Let's take `sum` as an example, `combiner = combiner + recode.value`. In the end, all concerned records are merged into the combiner
 -	If there is another set of records with the same key as the pairs above. `combineByKey()` will produce another `combiner'`. In the last step, the final result is equal to `mergeCombiners(combiner, combiner')`.
 

@@ -1,6 +1,6 @@
 # cache and checkpoint
 
-`cache` (or `persist`) is an important feature which does not exist in Hadoop. It makes Spark much more fast to reuse a data set, e.g. iterative algorithm in machine learning, interactive data exploration, etc. Different from Hadoop MapReduce jobs, Spark's logical/physical plan can be very large, so the computing chain could be too long that it takes lots of time to compute RDD. If, unfortunately, some errors or exceptions occur during the execution of a task, the whole computing chain needs to be re-executed, which is considerably expensive. Therefore, we need to `checkpoint` some time-consuming RDDs. Thus, even if the following RDD goes wrong, it can continue with the data retrieved from checkpointed RDDs.
+`cache` (or `persist`) is an important feature which does not exist in Hadoop. It makes Spark much faster to reuse a data set, e.g. iterative algorithm in machine learning, interactive data exploration, etc. Different from Hadoop MapReduce jobs, Spark's logical/physical plan can be very large, so the computing chain could be too long that it takes lots of time to compute RDD. If, unfortunately, some errors or exceptions occur during the execution of a task, the whole computing chain needs to be re-executed, which is considerably expensive. Therefore, we need to `checkpoint` some time-consuming RDDs. Thus, even if the following RDD goes wrong, it can continue with the data retrieved from checkpointed RDDs.
 
 ## cache()
 
@@ -36,11 +36,11 @@ rdd.iterator()
 => key = RDDBlockId(rdd.id, split.index)
 => blockManager.get(key)
 => computedValues = rdd.computeOrReadCheckpoint(split, context)
-      if (isCheckpointed) firstParent[T].iterator(split, context) 
+      if (isCheckpointed) firstParent[T].iterator(split, context)
       else compute(split, context)
 => elements = new ArrayBuffer[Any]
 => elements ++= computedValues
-=> updatedBlocks = blockManager.put(key, elements, tellMaster = true)    
+=> updatedBlocks = blockManager.put(key, elements, tellMaster = true)
 ```
 
 When `rdd.iterator()` is called to compute some partitions in the `rdd`, a `blockId` will be used to indicate which partition to cache, where `blockId` is of `RDDBlockId` type which is different from other data types in `memoryStore` like `result` of `task`. And then, partitions in `blockManger` will be checked to see whether they are checkpointed. If so, it will say that the task has already been executed, no more computation is needed for this partition. The `elements` of type `ArrayBuffer` will take all records of the partition from the check point. If not, the partition will be computed first, then all its records will be put into `elements`. Finally, `elements` will be submitted to `blockManager` for caching.
@@ -88,7 +88,7 @@ After initialization, `RDDCheckpointData` will mark RDD `MarkedForCheckpoint`.
 
 **checkpointing in progress**
 
-When a job is finished, `finalRdd.doCheckpoint()` will be called. `finalRDD` scans the computing chain backward. When meeting an RDD which needs to be checkpointed, the RDD will be marked `CheckpointingInProgress`, and then the configuration files (for writing to hdfs), like core-site.xml, will be broadcast to `blockManager` of the other work nodes. After that, a job will be launched to finish `checkpoint`: 
+When a job is finished, `finalRdd.doCheckpoint()` will be called. `finalRDD` scans the computing chain backward. When meeting an RDD which needs to be checkpointed, the RDD will be marked `CheckpointingInProgress`, and then the configuration files (for writing to hdfs), like core-site.xml, will be broadcast to `blockManager` of the other work nodes. After that, a job will be launched to finish `checkpoint`:
 
 ```scala
 rdd.context.runJob(rdd, CheckpointRDD.writeToFile(path.toString, broadcastedConf))
@@ -103,10 +103,10 @@ What's interesting is the following:
 Two `RDD`s are checkpointed in driver program, but only the `result` (see code below) is successfully checkpointed. Not sure whether it is a bug or only that the downstream RDD will be intentionally checkpointed.
 
 ```scala
-val data1 = Array[(Int, Char)]((1, 'a'), (2, 'b'), (3, 'c'), 
+val data1 = Array[(Int, Char)]((1, 'a'), (2, 'b'), (3, 'c'),
     (4, 'd'), (5, 'e'), (3, 'f'), (2, 'g'), (1, 'h'))
 val pairs1 = sc.parallelize(data1, 3)
-    
+
 val data2 = Array[(Int, Char)]((1, 'A'), (2, 'B'), (3, 'C'), (4, 'D'))
 val pairs2 = sc.parallelize(data2, 2)
 
@@ -122,7 +122,7 @@ result.checkpoint
 
 **Q: the difference between `cache` and `checkpoint` ?**
 
-Here is the an answer from Tathagata Das: 
+Here is the an answer from Tathagata Das:
 
 There is a significant difference between cache and checkpoint. Cache materializes the RDD and keeps it in memory (and/or disk). But the lineage（computing chain）of RDD (that is, seq of operations that generated the RDD) will be remembered, so that if there are node failures and parts of the cached RDDs are lost, they can be regenerated. However, **checkpoint saves the RDD to an HDFS file and actually forgets the lineage completely.** This allows long lineages to be truncated and the data to be saved reliably in HDFS, which is naturally fault tolerant by replication.
 
@@ -145,23 +145,23 @@ object groupByKeyTest {
 
    def main(args: Array[String]) {
     val conf = new SparkConf().setAppName("GroupByKey").setMaster("local")
-    val sc = new SparkContext(conf) 
+    val sc = new SparkContext(conf)
     sc.setCheckpointDir("/Users/xulijie/Documents/data/checkpoint")
-     
+
 	val data = Array[(Int, Char)]((1, 'a'), (2, 'b'),
 		    						 (3, 'c'), (4, 'd'),
 		    						 (5, 'e'), (3, 'f'),
 		    						 (2, 'g'), (1, 'h')
-		    						)    							
+		    						)
 	val pairs = sc.parallelize(data, 3)
-	
+
 	pairs.checkpoint
 	pairs.count
-	
+
 	val result = pairs.groupByKey(2)
 
 	result.foreachWith(i => i)((x, i) => println("[PartitionIndex " + i + "] " + x))
-	
+
 	println(result.toDebugString)
    }
 }
