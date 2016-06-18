@@ -13,7 +13,7 @@ We can see from the deployment diagram (Standalone version):
   - A Spark cluster has a Master node and multiple Worker nodes, which are equivalent to Hadoop's Master and Slave nodes.
   - The Master node has a Master daemon process, which manages all the Worker nodes.
   - The Worker node has a Worker daemon process, responsible for communicating with the Master node and managing local Executors.
-  - In the official document, the Driver is explained as "The process running the main() function of the application and creating the SparkContext". A dirver program, such as WordCount.scala, is regarded as a Spark application. If the driver program is launched on the Master node as follows:
+  - In the official document, the Driver is explained as "The process running the main() function of the application and creating the SparkContext". A driver program, such as WordCount.scala, is regarded as a Spark application. If the driver program is launched on the Master node as follows:
 
     ```scala
 	./bin/run-example SparkPi 10
@@ -24,7 +24,7 @@ We can see from the deployment diagram (Standalone version):
 	val sc = new SparkContext("spark://master:7077", "AppName")
 	...
 	```
-   The driver program will run atop the localPC. However, this approach is not recommended since the local PC may not be in the same network with the Worker nodes, which will slow down the communication between the driver and the executors.
+   The driver program will run atop the local PC. However, this approach is not recommended since the local PC may not be in the same network with the Worker nodes, which will slow down the communication between the driver and the executors.
 
   - Each Worker manages one or multiple ExecutorBackend processes. Each ExecutorBackend launches and manages an Executor instance. Each Executor maintains a thread pool, in which each task runs as a thread.
   - Each application has one Driver and multiple Executors. The tasks within the same Executor belong to the same application.
@@ -103,7 +103,7 @@ Since this is a simple application, let's estimate the runtime data size in each
   6. The action count() is applied to sum the number of elements in  `arr1` in all mappers, the result is `numMappers * numKVPairs = 1,000,000`. This action triggers the caching of `arr1`s.
   7. `groupByKey` operation is performed on cached `pairs1`. The reducer number (a.k.a., partition number) is `numReducers`. Theoretically, if hash(key) is evenly distributed, each reducer will receive `numMappers * numKVPairs / numReducer ＝ 27,777` pairs of `(Int, Array[Byte])`, with a size of `Size(pairs1) / numReducer = 27MB`.
   8. Reducer aggregates the records with the same Int key, the result is `(Int, List(Byte[], Byte[], ..., Byte[]))`.
-  9. Finally, a `count()` action sums up the record number in each reducer, the final result is actually the number of distinct integers in `paris1`.
+  9. Finally, a `count()` action sums up the record number in each reducer, the final result is actually the number of distinct integers in `pairs1`.
 
 ## Logical Plan
 
@@ -135,7 +135,7 @@ Let's detail the logical plan:
   - Each value in MapPartitionRDD (`Array[Byte]`) is converted to `Iterable`.
   - The last count() action performs on MapPartitionRDD.
 
-**The logical plan represents the applicaion dataflow, including the data transformations , the intermediate RDDs, and the data dependency between these RDDs.**
+**The logical plan represents the application dataflow, including the data transformations , the intermediate RDDs, and the data dependency between these RDDs.**
 
 ## Physical Plan
 
