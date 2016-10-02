@@ -44,12 +44,14 @@ Apache Spark รุ่น: 1.0.2,
 
 เอกสารนี้เขียนด้วยภาษา Markdown, สำหรับเวอร์ชัน PDF ภาษาจีนสามารถดาวน์โหลด [ที่นี่](https://github.com/JerryLead/SparkInternals/tree/master/pdf).
 
-ถ้าคุณใช้ Max OS X, เราขอและนำ [MacDown](http://macdown.uranusjr.com/) แล้วใช้ธีมของ github จะทำให้อ่านได้สะดวก
+ถ้าคุณใช้ Max OS X, เราขอแนะนำ [MacDown](http://macdown.uranusjr.com/) แล้วใช้ธีมของ github จะทำให้อ่านได้สะดวก
 
 ## ตัวอย่าง
 บางตัวอย่างที่ผู้เขียนสร้างข้นเพื่อทดสอบระบบขณะที่เขียนจะอยู่ที่ [SparkLearning/src/internals](https://github.com/JerryLead/SparkLearning/tree/master/src/internals).
 
 ## Acknowledgement
+
+**Note : ส่วนของกิตติกรรมประกาศจะไม่แปลครับ**
 
 I appreciate the help from the following in providing solutions and ideas for some detailed issues:
 
