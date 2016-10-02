@@ -1,47 +1,53 @@
-# Spark Internals
+# ภายใน Spark (Spark Internals)
 
-Spark Version: 1.0.2
-Doc Version: 1.0.2.0
+Apache Spark รุ่น: 1.0.2,
+เอกสาร รุ่น: 1.0.2.0
 
-## Authors
+## ผู้เขียน
 | Weibo Id | Name |
 |:-----------|:-------------|
 |[@JerryLead](http://weibo.com/jerrylead) | Lijie Xu |
 
-## Introduction
+## แปลและเรียบเรียง
+| Twitter | Name |
+|:-----------|:-------------|
+|[@AorJoa](https://twitter.com/AorJoa) | Bhuridech Sudsee |
 
-This series discusses the design and implementation of Apache Spark, with focuses on its design principles, execution mechanisms, code architecture and performance optimization. In addition, there's some comparisons with Hadoop MapReduce in terms of design and implementation. I'm reluctant to call this document a "code walkthrough" because the goal is not to analyze each piece of code in the project, but to understand the whole system in a systematic way, through the process of a Spark job, from its creation to completion.
 
-There're many ways to discuss a computer system, here I've chosen a **problem-driven** approach. Firstly one concret problem is introduced, then it gets analyzed step by step. We'll start from a typical Spark example job to discuss all the system modules and supports it needs for its creation and execution, to give a big picture. Then we'll selectively go into the design and implementation details of some system modules. I believe that this approach is better than diving into each module right from the beginning.
+## เกริ่นนำ
 
-The target audience of this series are geeks who want to have a deeper understanding of Apache Spark as well as other distributed computing frameworks.
+เอกสารนี้เป็นการพูดคุยแลกเปลี่ยนเกี่ยวการการออกแบบและใช้งานซอฟต์แวร์ Apache Spark ซึ่งจะโฟกัสไปที่เรื่องของหลักการออกแบบ, กลไกการทำงาน, สถาปัตยกรรมของโค้ด และรวมไปถึงการปรับแต่งประสิทธิภาพ นอกจากประเด็นเหล่านีี้ก็จะมีการเปรียบเทียบในบางแง่มุมกับ Hadoop MapReduce ในส่วนของการออกแบบและการนำไปใช้งาน อย่างหนึ่งที่ผู้เขียนต้องการให้ทราบคือเอกสารนึ้ไม่ได้ต้องการใช้โค้ดเป็นส่วนนำไปสู่การอธิบายจึงจะไม่มีการอธิบายส่วนต่างๆของโค้ด แต่จะเน้นให้เข้าใจระบบโดยรวมที่ Spark ทำงานในลักษณะของการทำงานเป็นระบบ (อธิบายส่วนโน้นส่วนนี้ ว่าทำงานประสานงานกันยังไง) ลักษณะวิกีการส่งงานที่เรียกว่า Spark Job จนกระทั่งถึงการทำงานจนทงานเสร็จสิ้น
 
-I'll try my best to keep this documentation up to date with Spark since it's a fast evolving project with an active community. The documentation's main version is in sync with Spark's version. The additional number at the end represents the documentation's update version.
+มีรูปแบบวิธีการหลายอย่างที่จะอธิบายระบบของคอมพิวเตอร์ แต่ผู้เขียนเลือกที่จะใช้ **problem-driven** หรือวิธีการขับเคลื่อนด้วยปัญหา ขั้นตอนแรกของคำการนำเสนอปัญหาที่เปิดขึ้น จากนั้นก็วิเคราะห์ข้อมูลทีละขั้นตอน จากนั้นจะใช้ตัวอย่างที่มีทั่วๆไปของ Spark เพื่อเล่าถึงโมดูลของระบบและความต้องการของระบบเพื่อที่จะใช้สร้างและประมวลผล และเพื่อให้เห็นภาพรวมๆของระบบก็จะมีการเลือกส่วนเพื่ออธิบายรายละเอียดของการออกแบบและนำไปใช้งายสำหรับบางโมดูลของระบบ ซึ่งผู้เขียนก็เชื่อว่าวิธีนี้จะดีกว่าการที่มาไล่กระบวนการของระบบทีละส่วนตั้งแต่ต้น
 
-For more academic oriented discussion, please check Matei's PHD paper and other related papers. You can also have a look my blog (in Chinese) [blog](http://www.cnblogs.com/jerrylead/archive/2013/04/27/Spark.html).
+จุดหลายของเอกสารชุดนี้คือพวกที่มีความรู้ Geek ที่อยากเข้าใจการทำงานเชิงลึกของ Apache Spark และเฟรมเวิร์คของระบบประมวลผลแบบกระจาย (Distributed computing) ตัวอื่นๆ
 
-I haven't been writing such complete documentation for a while. Last time it was about three years ago when I was studying Andrew Ng's ML course. I was really motivated at that time! This time I've spent 20+ days on this document, from the summer break till now. Most of the time is spent on debugging, drawing diagrams and thinking how to put my ideas in the right way. I hope you find this series helpful.
+ผู้เขียนพยายามที่จะอัพเดทเอกสารตามรุ่นของ Spark ที่เปลี่ยนอย่างรวดเร็ว เนื่องจากชุมชนนักพัฒนาที่แอคทิฟมากๆ ผู้เขียนเลือกที่จะใช้เลขรุ่นหลักของ Spark มาใช้กับเลขที่รุ่นของเอกสาร (ตัวอย่างใช้ Apache Spark 1.0.2 เลยใช้เลขรุ่นของเอกสารเป็น 1.0.2.0)
 
-## Contents
-We start from the creation of a Spark job, then discuss its execution, finally we dive into some related system modules and features.
+สำหรับข้อถกเถียงทางวิชาการ สามารถติดตามได้ที่เปเปอร์ดุษฏีนิพนธ์ของ Matei's และเปเปอร์อื่นๆ หรือว่ายจะติดตามผู้เขียนก็ไปได้ที่ [บล๊อกภาษาจีน](http://www.cnblogs.com/jerrylead/archive/2013/04/27/Spark.html)
 
-1. [Overview](https://github.com/JerryLead/SparkInternals/blob/master/markdown/1-Overview.md) Overview of Apache Spark
-2. [Job logical plan](https://github.com/JerryLead/SparkInternals/blob/master/markdown/2-JobLogicalPlan.md) Logical plan of a job (data dependency graph)
-3. [Job physical plan](https://github.com/JerryLead/SparkInternals/blob/master/markdown/3-JobPhysicalPlan.md) Physical plan
-4. [Shuffle details](https://github.com/JerryLead/SparkInternals/blob/master/markdown/4-shuffleDetails.md) Shuffle process
-5. [Architecture](https://github.com/JerryLead/SparkInternals/blob/master/markdown/5-Architecture.md) Coordination of system modules in job execution
-6. [Cache and Checkpoint](https://github.com/JerryLead/SparkInternals/blob/master/markdown/6-CacheAndCheckpoint.md)  Cache and Checkpoint
-7. [Broadcast](https://github.com/JerryLead/SparkInternals/blob/master/markdown/7-Broadcast.md) Broadcast feature
+ผู้เขียนไม่สามารถเขียนเอกสารได้เสร็จในขณะนี้ ครั้งล่าสุดที่ดได้เขียนคือราว 3 ปีที่แล้วตอนที่กำลังเรียนคอร์ส Andrew Ng's ML อยู่ ซึ่งตอนนั้นมีแรงบัลดาลใจที่จะทำ ตอนที่เขียนเอกสารนี้ผู้เขียนใช้เวลาเขียนเอกสารขึ้นมา 20 กว่าวันใช้ช่วงซัมเมอร์ เวลาส่วนใหญ่ที่ใช้ไปใช้กับการดีบั๊ก, วาดแผนภาพ, และจัดวางไอเดียให้ถูกที่ถูกทาง. ผู้เขียนหวังเป็นอย่างยิ่งว่าเอกสารนี้จะช่วยผู้อ่านได้
+
+
+## เนื้อหา
+เราจะเริ่มกันที่การสร้าง Spark Job และคุยกันถึงเรื่องว่ามันทำงานยังไง จากนั้นจึงจะอธิบายระบบที่เกี่ยวข้องและฟีเจอร์ของระบบที่ทำให้งานเราสามารถประมวลผลออกมาได้
+
+1. [Overview](https://github.com/JerryLead/SparkInternals/blob/master/markdown/1-Overview.md) ภาพรวมของ Apache Spark
+2. [Job logical plan](https://github.com/JerryLead/SparkInternals/blob/master/markdown/2-JobLogicalPlan.md) แผนเชิงตรรกะ : Logical plan (data dependency graph)
+3. [Job physical plan](https://github.com/JerryLead/SparkInternals/blob/master/markdown/3-JobPhysicalPlan.md) แผนเชิงกายภาย : Physical plan
+4. [Shuffle details](https://github.com/JerryLead/SparkInternals/blob/master/markdown/4-shuffleDetails.md) กระบวนการสับเปลี่ยน (Shuffle)
+5. [Architecture](https://github.com/JerryLead/SparkInternals/blob/master/markdown/5-Architecture.md) กระบวนการประสานงานของโมดูลในระบบขณะประมวลผล
+6. [Cache and Checkpoint](https://github.com/JerryLead/SparkInternals/blob/master/markdown/6-CacheAndCheckpoint.md)  Cache และ Checkpoint
+7. [Broadcast](https://github.com/JerryLead/SparkInternals/blob/master/markdown/7-Broadcast.md) ฟีเจอร์ Broadcast
 8. Job Scheduling TODO
 9. Fault-tolerance TODO
 
+เอกสารนี้เขียนด้วยภาษา Markdown, สำหรับเวอร์ชัน PDF ภาษาจีนสามารถดาวน์โหลด [ที่นี่](https://github.com/JerryLead/SparkInternals/tree/master/pdf).
 
-The documentation is written in markdown. The pdf version is also available [here](https://github.com/JerryLead/SparkInternals/tree/master/pdf).
+ถ้าคุณใช้ Max OS X, เราขอและนำ [MacDown](http://macdown.uranusjr.com/) แล้วใช้ธีมของ github จะทำให้อ่านได้สะดวก
 
-If you're under Max OS X, I recommand [MacDown](http://macdown.uranusjr.com/) with a github theme for reading.
-
-## Examples
-I've created some examples to debug the system during the writing, they are avaible under [SparkLearning/src/internals](https://github.com/JerryLead/SparkLearning/tree/master/src/internals).
+## ตัวอย่าง
+บางตัวอย่างที่ผู้เขียนสร้างข้นเพื่อทดสอบระบบขณะที่เขียนจะอยู่ที่ [SparkLearning/src/internals](https://github.com/JerryLead/SparkLearning/tree/master/src/internals).
 
 ## Acknowledgement
 
