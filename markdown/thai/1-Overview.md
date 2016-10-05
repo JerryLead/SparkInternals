@@ -1,39 +1,41 @@
-## Overview
+## ภาพรวมของ Apache Spark
 
-Firstly we'll have a look at Spark's deployment. The question here is: **after a successful deployment, what are the services launched by each node of the cluster?**
+เริ่มแรกเราจะให้ความสนใจไปที่ระบบดีพลอยของ Spark คำถามก็คือ : **ถ้าดีพลอยเสร็จเรียบร้อยแล้ว ระบบของแต่ละโหนดในคลัสเตอร์ทำงานอะไรบ้าง**
 
 ## Deployment Diagram
 ![deploy](../PNGfigures/deploy.png)
 
-We can see from the diagram:
-  - There's Master node and Worker node in the cluster, they are equivalent to Hadoop's Master and Slave node
-  - Master node has a Master daemon process, managing all worker nodes
-  - Worker node has a Worker daemon process, responsible for communicating with the master node and for managing local executors
-  - In the official document, the Driver is explained as "The process running the main() function of the application and creating the SparkContext". The application is the user's program (driver program), such as WordCount.scala. If the driver program is running on the Master node, for example if we run the this on the Master node
 
-    ```scala
+จากแผนภาพการดีพลอย :		
+	- โหนด Master และโหนด Worker ในคลัสเตอร์ มีหน้าที่เหมือนกับโหนด Master และ Slave ของ Hadoop		
+	- โหนด Master จะมีโปรเซส Master ที่ทำงานอยู่เบื้องหลังเพื่อที่จะจัดการโหนด Worker ทุกตัว		
+	- โหนด Worker จะมีโปรเซส Worker ทำงานอยู่เบื้องหลังซึ่งรับผิดชอบการติดต่อกับโหนด Master และจัดการกับ Executer ภายในตัวโหนดของมันเอง		
+	- Driver ในเอกสารที่เป็นทางการการอธิบายว่า "The process running the main() function of the application and creating the SparkContext" ไดรว์เวอร์คือโปรเซสที่กำลังทำงานฟังก์ชั่น main() ซึ่งเป็นฟังก์ชันที่เอาไว้เริ่มต้นการทำงานของแอพพลิเคชันของเราและสร้าง SparkContext ซึ่งจะเป็นสภาพแวดล้อมที่แอพจะใช้ทำงานร่วมกัน และแอพพลิเคชันก็คือโปรแกรมของผู้ใช้ที่ต้องให้ให้ประมวลผลบางทีเราจะเรียกว่าโปรแกรมไดรว์เวอร์ (Driver program) เช่น WordCount.scala เป็นต้น หากโปรแกรมไดรเวอร์กำลังทำงานอยู่บนโหนด Master ยกตัวอย่าง	
+
+	```scala
 	./bin/run-example SparkPi 10
-	```
-	Then the SparkPi program will be the Driver on the Master node. In case of a YARN cluster, the Driver may be scheduled to a Worker node (for example Worker node 2 in the diagram). If the driver program is run on a local PC, such as running from within Eclipse with
-
+	```	
+	จากโค้ดด้านบนแอพ SparkPi สามารถเป็นโปรแกรมไดรว์เวอร์สำหรับโหนด Master ได้ ในกรณีของ YARN (ตัวจัดการคลัสเตอร์ตัวหนึ่ง) ไดรว์เวอร์อาจจะถูกสั่งให้ทำงานที่โหนด Worker ได้ ซึ่งถ้าดูตามแผนภาพด้านบนมันเอาไปไว้ที่โหนด Worker 2 และถ้าโปรแกรมไดรเวอร์ถูกสร้างภายในเครื่องเรา เช่นการใช้ Eclipse หรือ IntelliJ บนเครื่องของเราเองตัวโปรแกรมไดรว์เวอร์ก็จะอยู่ในเครื่องเรา พูดง่ายๆคือไดรว์เวอร์มันเปลี่ยนที่อยู่ได้
+	
 	```scala
 	val sc = new SparkContext("spark://master:7077", "AppName")
 	```
-   Then the driver program will be on the local machine. However this is not a recommended way of running Spark since the local machine may not be in the same network with the Worker nodes, which will slow down the communication between the driver and the executors
+แม้เราจะชี้ตัว SparkContext ไปที่โหนด Master แล้วก็ตามแต่ถ้าโปรแกรมทำงานบนเครื่องเราตัวไดรว์เวอร์ก้ยังจะอยู่บนเครื่องเรา อย่างไรก็ดีวิธีนี้ไม่แนะนำให้ทำถ้าหากเน็ตเวิร์๕อยู่คนละวงกับ Worker เนื่องจากจะทำใหการสื่อสารระหว่าง Driver กับ Executor ช้าลงอย่างมาก มีข้อควรรู้ยางอย่างดังนี้
 
-  - There may have one or multiple ExecutorBackend processes in each Worker node, each one possesses an Executor instance. Each Executor object maintains a thread pool. Each task runs on a thread.
-  - Each application has one driver and multiple executors. All tasks within the same executor belongs to the same application
-  - In Standalone deployment mode, ExecutorBackend is instantiated as CoarseGrainedExecutorBackend
+  - เราสามารถมี ExecutorBackend ได้ตั้งแต่ 1 ตัวหรือหลายตัวในแต่ละโหนด Worker และตัว ExecutorBackend หนึ่งตัวจะมี Executor หนึ่งตัว แต่ละ Executor จะดูแล Thread pool และ Task ซึ่งเป็นงานย่อยๆแต่ละ Task จะทำงานบน Thread ตัวเดียว
+  - แต่ละแอพมีไดรว์เวอร์ได้แค่ตัวเดียวแต่สามารถมี Executor ได้หลายตัว, และ Task ทุกตัวที่อยู่ใน Executor เดียวกันจะเป็นของแอพตัวเดียวกัน
+  - ในโหมด Standalone, ExecutorBackend เป็นอินสแตนท์ของ CoarseGrainedExecutorBackend
 
-    > In my cluster there's only one CoarseGrainedExecutorBackend process on each worker and I didn't manage to configure multiple instances of it (my guess is that there'll be multiple CoarseGrainedExecutorBackend process when when multiple applications are running, need to be confirmed).
-    > Check this blog (in Chinese) [Summary on Spark Executor Driver Resource Scheduling](http://blog.csdn.net/oopsoom/article/details/38763985) by [@OopsOutOfMemory](http://weibo.com/oopsoom) if you want to know more about the relation between Worker and Executor.
+    > คลัสเตอร์ของผู้เขียนมีแค่ CoarseGrainedExecutorBackend ตัวเดียวบนแต่ละโหนด Worker ผู้เขียนคิดว่าหากมีหลายแอพพลิเคชันรันอยู่มันก็จะมีหลาย CoarseGrainedExecutorBackend แต่ไม่ฟันธงนะ
+    
+    > อ่านเพิ่มในบล๊อก (ภาษาจีน) [Summary on Spark Executor Driver Resource Scheduling](http://blog.csdn.net/oopsoom/article/details/38763985) เขียนโดย [@OopsOutOfMemory](http://weibo.com/oopsoom) ถ้าอยากรู้เพิ่มเติมเกี่ยวกับ Worker และ Executor
 
-  - Worker controls the CoarseGrainedExecutorBackend by using a ExecutorRunner
+  - โหนด Worker จะควบคุม CoarseGrainedExecutorBackend ผ่านทาง ExecutorRunner
 
-After the deployment diagram, we'll examine an example job to see how a Spark job is created and executed.
+หลังจากดูแฟนภาพการดีพลอยแล้วเราจะมาทดลองสร้างตัวอย่างของ Spark job เพื่อดูว่า Spark job มันถูกสร้างและประมวลผลยังไง
 
-## Example Spark Job
-The example here is the GroupByTest application under the examples package in Spark. We assume that the application is run on the Master node, with the following command:
+## ตัวอย่างของ Spark Job
+ตัวอย่างนี้เป็นตัวอย่างการใช้งานแอพที่ชื่อ GroupByTest ภายใต้แพ็กเกจที่ติดมากับ Spark ซึ่งเราจะสมมุติว่าแอพนี้ทำงานอยู่บนโหนด Master โดยมีคำสั่งดังนี้
 
 ```scala
 /* Usage: GroupByTest [numMappers] [numKVPairs] [valSize] [numReducers] */
@@ -41,7 +43,7 @@ The example here is the GroupByTest application under the examples package in Sp
 bin/run-example GroupByTest 100 10000 1000 36
 ```
 
-The code of this application is the following:
+โค้ที่อยู่ในแอพมีดังนี้
 
 ```scala
 package org.apache.spark.examples
@@ -75,8 +77,9 @@ object GroupByTest {
       arr1
     }.cache
     // Enforce that everything has been calculated and in cache
-    pairs1.count
-
+println(">>>>>>")
+    println(pairs1.count)
+println("<<<<<<")
     println(pairs1.groupByKey(numReducers).count)
 
     sc.stop()
@@ -85,26 +88,26 @@ object GroupByTest {
 
 ```
 
-After reading the code, we should have an idea about how the data get transformed:
+หลังจากที่อ่านโค้ดแล้วจะพบว่าโค้ดนี้มีแนวความคิดในการแปลงข้อมูลดังนี้
 ![deploy](../PNGfigures/UserView.png)
 
-This is not a complicated application, let's estimate the data size and the result:
+แอพนี้ไม่ได้ซับซ้อนอะไรมาก เราจะประเมินขนาดของข้อมูลและผลลัพธ์ ซึ่งแอพก็จะมีการทำงานตามขั้นตอนดังนี้
 
-  1. Initialize SparkConf
-  2. Initialize numMappers=100, numKVPairs=10,000, valSize=1000, numReducers= 36
-  3. Initialize SparkContext. This is an important step, the SparkContext contains objectes and actors that are needed for the creation of a driver
-  4. For each mapper, a `arr1: Array[(Int, Byte[])]` is created, with a length of numKVPairs. Each byte array's size is valSize, a randomly generated integer. We may estimate `Size(arr1) = numKVPairs * (4 + valSize) = 10MB`, and we have `Size(pairs1) = numMappers * Size(arr1) ＝1000MB`
-  5. Each mapper is instructed to cache its `arr1` array into the memory
-  6. Then an action, count(), is applied to compute the size of `arr1` for all mappers, the result is `numMappers * numKVPairs = 1,000,000`. This action triggers the caching of `arr1`s
-  7. groupByKey operation is executed on `pairs1` which is already cached. The reducer number (or partition number) is numReducers. Theoretically, if hash(key) is well distributed, each reducer receives `numMappers * numKVPairs / numReducer ＝ 27,777` pairs of (Int, Array[Byte]), with a size of `Size(pairs1) / numReducer = 27MB`
-  8. Reducer aggregates the records with the same Int key, the result is `(Int, List(Byte[], Byte[], ..., Byte[]))`
-  9. Finally a count action sums up the record number in each reducer, the final result is actually the number of distinct integers in `paris1`
+  1. สร้าง SparkConf เพื่อกำหนดการตั้งค่าของ Spark (ตัวอย่างกำหนดชื่อของแอพ)
+  2. สร้างและกำหนดค่า numMappers=100, numKVPairs=10,000, valSize=1000, numReducers= 36
+  3. สร้าง SparkContext โดยใช้การตั้งค่าจาก SparkConf ขั้นตอนนี้สำคัญมาก เพราพ SparkContext จะมี Object และ Actor ซึ่งจำเป็นสำหรับการสร้างไดรเวอร์
+  4. สำหรับ Mapper แต่ละตัว `arr1: Array[(Int, Byte[])]` Array ชื่อ arr1 จะถูกสร้างขึ้นจำนวน numKVPairs ตัว, ภายใน Array แต่ละตัวมีคู่ Key/Value ซึ่ง Key เป็นตัวเลข (ขนาด 4 ไบต์) และ Value เป็นไบต์ขนาดเท่ากับ valSize อยู่ ทำให้เราประเมินได้ว่า `ขนาดของ arr1 = numKVPairs * (4 + valSize) = 10MB`, ดังนั้นจะได้ว่า `ขนาดของ pairs1 = numMappers * ขนาดของ arr1 ＝1000MB` ตัวนี้เป็นการประเมินการใช้พื้นที่จัดเก็บข้อมูลได้
+  5. Mapper แต่ละตัวจะ**ถูกสั่งให้ Cache** ตัว `arr1` (ผ่านทาง pairs1) เพื่อเก็บมันไว้ในหน่วยความจำเผื่อกรณีที่มีการเรียกใช้ (ยังไม่ได้ทำนะแต่สั่งใว้)
+  6. จากนั้นจะมีการกระทำ count() เพื่อคำนวณหาขนาดของ `arr1` สำหรับ Mapper ทุกๆตัวซึ่งผลลัพธ์จะเท่ากับ `numMappers * numKVPairs = 1,000,000` การกระทำในขั้นตอนนี้ทำให้เกิดการ Cahce ที่ตัว `arr1` เกิดขึ้นจริงๆ (จากคำสั่ง `pairs1.count()1` ตัวนี้จะมีสมาชิก 1,000,000 ตัว)
+  7. groupByKey ถูกสั่งให้ทำงานบน `pairs1` ซึ่งเคยถูก Cache เก็บไว้แล้ว โดยจำนวนของ Reducer (หรือจำนวนพาร์ทิชัน) ถูกกำหนดในตัวแปร numReducers ในทางทฤษฏีแล้วถ้าค่า Hash ของ Key มีการกระจายอย่างเท่าเทียมกันแล้วจะได้ `numMappers * numKVPairs / numReducer ＝ 27,777` ก็คือแต่ละตัวของ Reducer จะมีคู่ (Int, Array[Byte]) 27,777 คู่อยู่ในแต่ละ Reducer ซึ่งจะมีขนาดเท่ากับ `ขนาดของ pairs1 / numReducer = 27MB`
+  8. Reducer จะรวบรวมเรคคอร์ดหรือคู่ Key/Value ที่มีค่า Key เหมือนกันเข้าไว้ด้วยกันกลายเป็น Key เดียวแล้วก็ List ของ Byte `(Int, List(Byte[], Byte[], ..., Byte[]))`
+  9. ในขั้นตอนสุดท้ายการกระทำ count() จะนับหาผลรวมของจำนวนที่เกิดจากแต่ละ Reducer ซึ่งผ่านขั้นตอนการ groupByKey มาแล้ว (ทำให้ค่าอาจจะไม่ได้ 1,000,000 พอดีเป๊ะเพราะว่ามันถูกจับกลุ่มค่าที่ Key เหมือนกันเข้าไว้ด้วยกันแล้ว และค่าที่ได้จากการสุ่มอาจจะตรงกันพอดี) สุดท้ายแล้วการกระทำ count() จะรวมผลลัพธ์ที่ได้จากแต่ละ Reducer เข้าไว้ด้วยกันอีกทีเมื่อทำงานเสร็จแล้วก็จะได้จำนวนของ Key ที่ไม่ซ้ำกันใน `paris1`
 
-## Logical Plan
+## แผนเชิงตรรกะ Logical Plan
 
-The actual execution process of an application is more complicated than the above diagram. Generally speaking, a logical plan (or data dependency graph) will be created, then a physical plan (in the form of a DAG) will be generated. After that, concrete tasks will be generated and executed. Let's check the logical plan of this application:
+ในความเป็นจริงแล้วกระบวนการประมวลผลของแอพพลิเคชันของ Spark นั้นซับซ้อนกว่าที่แผนภาพด้านบนอธิบายไว้ ถ้าจะว่าง่ายๆ แผนเชิงตรรกะ Logical Plan (หรือ data dependency graph - DAG) จะถูกสร้างแล้วแผนเชิงกายภาพ Physical Plan ก็จะถูกผลิตขึ้น (English : a logical plan (or data dependency graph) will be created, then a physical plan (in the form of a DAG) will be generated เป็นการเล่นคำประมาณว่า Logical plan มันถูกสร้างขึ้นมาจากของที่ยังไม่มีอะไร Physical plan ในรูปของ DAG จาก Logical pan นั่นแหละ จะถูกผลิตขึ้น) หลังจากขั้นตอนกาารวางแผนทั้งหลายแหล่นี้แล้ว Task จะถูกผลิตแล้วก็ทำงาน เดี๋ยวเราลองมาดู Logical plan ของแอพพลิเคชันดีกว่า
 
-A call of function `RDD.toDebugString` will return the logical plan:
+ตัวนี้เรียกใช้ฟังก์ชัน `RDD.toDebugString` แล้วมันจะคืนค่า Logical Plan กลับมา:
 
 ```scala
   MapPartitionsRDD[3] at groupByKey at GroupByTest.scala:51 (36 partitions)
@@ -113,58 +116,57 @@ A call of function `RDD.toDebugString` will return the logical plan:
         ParallelCollectionRDD[0] at parallelize at GroupByTest.scala:38 (100 partitions)
 ```
 
-We can also draw a diagram:
+วาดเป็นแผนภาพได้ตามนี้:
 ![deploy](../PNGfigures/JobRDD.png)
 
-> Notice that the `data in the partition` blocks shows the final result of the partitions, this does not necessarily mean that all these data resides in the memory in the same time
+> ข้อควรทราบ `data in the partition` เป็นส่วนที่เอาไว้แสดงค่าว่าสุดท้ายแล้วแต่ละพาร์ทิชันมีค่ามีค่ายังไง แต่มันไม่ได้หมายความว่าข้อมูลทุกตัวจะต้องอยู่ในหน่วยความจำในเวลาเดียวกัน มันเพียงแต่แสดงว่าจะมีข้อมูลเหล่านี้อยู่ในพาร์ทิชันเดียวกัน
 
-So we could conclude:
-  - User initiated an array from 0 to 99: `0 until numMappers`
-  - parallelize() generate the initial ParallelCollectionRDD, each partititon contains an integer i
-  - FlatMappedRDD is generated by calling a transformation method (flatMap) on the ParallelCollectionRDD. Each partition of the FlatMappedRDD contains an `Array[(Int, Array[Byte])]`
-  - When the first count() executes, this action executes on each partition, the results are sent to the driver and are summed up in the driver
-  - Since the FlatMappedRDD is cached in memory, so its partitions are colored differently
-  - groupByKey() generates the following 2 RDDs (ShuffledRDD and MapPartitionsRDD), we'll see in later chapters why it is the case
-  - Usually we see a ShuffleRDD if the job needs a shuffle. Its relation with the former RDD is similar to the relation between the output of mappers and the input of reducers in Hadoop
-  - MapPartitionRDD contains groupByKey()'s result
-  - Each value in MapPartitionRDD (`Array[Byte]`) is converted to `Iterable`
-  - The last count() action is executed in the same way as we explained above
+ดังนั้นเราขอสรุปดังนี้:		
+  - ผู้ใช้จะกำหนดค่าเริ่มต้นให้ข้อมูลมีค่าเป็นอาเรย์จาก 0 ถึง 99 จากคำสั่ง `0 until numMappers` จะได้จำนวน 100 ตัว		
+  - parallelize() จะสร้าง ParallelCollectionRDD แต่ละพาร์ทิชันก็จะมีจำนวนเต็ม i 		
+  - FlatMappedRDD จะถูกผลิตโดยการเรียกใช้ flatMap ซึ่งเป็นเมธอดการแปลงบน ParallelCollectionRDD จากขั้นตอนก่อนหน้า ซึ่งจะให้ FlatMappedRDD ออกมาในลักษณะ `Array[(Int, Array[Byte])]`		
+  - หลังจากการกระทำ count() ระบบก็จะทำการนับสมาชิกที่อยู่ในแต่ละพาร์ทิชันของใครของมัน เมื่อนับเสร็จแล้วผลลัพธ์ก็จะถูกส่งกลับไปรวมที่ไดรว์เวอร์เพื่อที่จะได้ผลลัพธ์สุดท้ายออกมา 		
+  - เนื่องจาก FlatMappedRDD ถูกเรียกคำสั่ง Cache เพื่อแคชข้อมูลไว้ในหน่วยความจำ และใช้สีเหลืองให้รู้ว่ามีความแตกต่างกันอยู่นะ		
+  - groupByKey() จะผลิต 2 RDD (ShuffledRDD และ MapPartitionsRDD) เราจะคุยเรื่องนี้กันในบทถัดไป		
+  - บ่อยครั้งที่เราจะเห็น ShuffleRDD เกิดขึ้นเพราะงานต้องการการสับเปลี่ยน ลักษณะความสัมพันธ์ของตัว ShuffleRDD กับ RDD ที่ให้กำเนิดมันจะเป็นลักษณะเดียวกันกับ เอาท์พุทของ Mapper ที่สัมพันธ์กับ Input ของ Reducer ใน Hadoop		
+  - MapPartitionRDD เก็บผลลัพธ์ของ groupByKey() เอาไว้		
+  - ค่า Value ของ MapPartitionRDD (`Array[Byte]`) จำถูกแปลงเป็น `Iterable`		
+  - ตัวการกระทำ count() ก็จะทำเหมือนกับที่อธิบายไว้ด้านบน
+  
+**เราจะเห็นได้ว่าแผนเชิงตรรกะอธิบายการไหลของข้อมูลในแอพพลิเคชัน: การแปลง (Transformation) จะถูกนำไปใช้กับข้อมูล, RDD ระหว่างทาง (Intermediate RDD) และความขึ้นต่อกันของพวก RDD เหล่านั้น**
 
-**We can see that the logical plan describes the data flow of the application: the transformations that are applied to the data, the intermediate RDDs and the dependency between these RDDs.**
+## แผนเชิงกายภาพ Physical Plan
 
-## Physical Plan
+ในจุดนี้เราจะชี้ให้เห็นว่าแผนเชิงตรรกะ Logical plan นั้นเกี่ยวข้องกับการขึ้นต่อกันของข้อมูลแต่มันไม่ใช่งานจริงหรือ Task ที่เกิดการประมวลผลในระบบ ซึ่งจุดนี้ก็เป็นอีกหนึ่งจุดหลักที่ทำให้ Spark ต่างกับ Hadoop, ใน Hadoop ผู้ใช้จะจัดการกับงานที่กระทำในระดับกายภาพ (Physical task) โดยตรง: Mapper tasks จะถูกนำไปใช้สำหรับดำเนินการ (Operations) บนพาร์ทิชัน จากนั้น Reduce task จะทำหน้าที่รวบรวมกลับมา แต่ทั้งนี้เนื่องจากว่าการทำ MapReduce บน Hadoop นั้นเป็นลักษณะที่กำหนดการไหลของข้อมูลไว้ล่วงหน้าแล้วผู้ใช้แค่เติมส่วนของฟังก์ชัน map() และ reduce() ในขณะที่ Spark นั้นค่อนข้างยืดหยุ่นและซับซ้อนมากกว่า ดังนั้นมันจึงยากที่จะรวมแนวคิดเรื่องความขึ้นต่อกันของข้อมูลและงานทางกายภาพเข้าไว้ด้วยกันเหตุผลก็คือ Spark แยกการไหลของข้อมูลและงานที่จะถูกประมวลผลจริง, และอัลกอริทึมของการแปลงจาก Logical plan ไป Physical plan ซึ่งเราจะคุยเรื่องนี้ันต่อในบทถัดๆไป
 
-As we've found out, the logical plan is about the dependency of data, not the actual execution of tasks. This is a main difference compared to Hadoop. In Hadoop, user handles directly the physical tasks: mapper tasks for applying operations on partitions and reducers tasks for aggregation. This is because in Hadoop, the data flow is pre-defined and fixed, user just fills in the map() and reduce() function. While in Spark, the data flow is very flexible and could be complicated, so it's difficult to simply combine together the concept of  data dependency and the physical tasks. For this reason, Spark separates the data flow and the actual task execution process, and has algorithms to transform a logical plan into a physical plan. We'll discuss this transformation in later chapter.
-
-For the example job, let's draw its physical DAG:
+ยกตัวอย่างเราสามารถเขียนแผนเชิงกายภาพของ DAG ดังนี้:
 ![deploy](../PNGfigures/PhysicalView.png)
 
-We can see that the GroupByTest application generates 2 jobs, the first job is triggered by the first action (that is `pairs1.count()`). Let's check this first job:
+เราจะเห็นว่าแอพพลิเคชัน GroupByTest สามารถสร้างงาน 2 งาน งานแรกจะถูกกระตุ้นให้ทำงานโดยคำสั่ง `pairs1.count()` มาดูรายละเอียดของ Job นี้กัน:
 
-  - The job contains only 1 stage (now we only need to know that there's a concept called stage, we'll see it in detail in later chapters)
-  - Stage 0 has 100 ResultTask
-  - Each task computes flatMap, generating FlatMappedRDD, then executes the action (`count()`), count the record number in each partition. For example in partition 99 there's only 9 records.
-  - Since `pairs1` is instructed to be cached, the tasks will cache the partitions of FlatMappedRDD inside the executor's memory space.
-  - After the tasks' execution, drive collects the results of tasks and sums them up
-  - Job 0 completes
+  - Job จะมีเพียง Stage เดียว (เดี๋ยวเราก็จะคุยเรื่องของ Stage กันทีหลัง) 
+  - Stage 0 มี 100 ResultTask
+  - แต่ละ Task จะประมวลผล flatMap ซึ่งจะสร้าง FlatMappedRDD แล้วจะทำ `count()` เพื่อนับจำนวนสมาชิกในแต่ละพาร์ทิชัน ยกตัวอย่างในพาร์ทิชันที่ 99 มันมีแค่ 9 เรคอร์ด
+  - เนื่องจาก `pairs1` ถูกสั่งให้แคชดังนั้น Tasks จะถูกแคชในรูปแบบพาร์ทิชันของ FlatMappedRDD ภายในหน่วยความจำของตัว Executor
+  - หลังจากที่ Task ถูกทำงานแล้วไดรว์เวอร์จะเก็บผลลัพธ์มันกลับมาเพื่อบวกหาผลลัพธ์สุดท้าย 
+  - Job 0 ประมวลผลเสร็จเรียบร้อย
 
-The second job is triggered by `pairs1.groupByKey(numReducers).count`:
+ส่วน Job ที่สองจะถูกกระตุ้นให้ทำงานโดยการกระทำ `pairs1.groupByKey(numReducers).count`:
 
-  - There's 2 stages in this job
-  - Stage 0 contains 100 ShuffleMapTask, each task reads a part of `paris1` from the cache, partitions it, and write the partition results on local disk. For example, the task will place the a record `(1, Array(...))` in the bucket of key 1 and store it on the disk. This step is similar to the partitioning of mappers in Hadoop
-  - Stage 1 contains 36 ResultTask, each task fetches and shuffles the data that it need to process. It does aggregation in the same time as fetching data and the mapPartitions() operation, then count() is applied to get the result. For example the ResultTask responsible for bucket 3 will fetch all data of bucket 3 from the workers and aggregates them locally
-  - After the tasks' execution, drive collects the results of tasks and sum them up
-  - Job 1 completes
+  - มี 2 Stage ใน Job
+  - Stage 0 จะมี 100 ShuffleMapTask แต่ละ Task จะอ่านส่วนของ `paris1` จากแคชแล้วพาร์ทิชันมันแล้วก็เขียนผลลัพธ์ของพาร์ทิชันไปยังโลคอลดิสก์ ยกตัวอย่าง Task ที่มีเรคอร์ดลักษณะคีย์เดียวกันเช่น Key 1 จาก Value เป็น Byte ก็จะกลายเป็นตระกร้าของ Key 1 เช่น `(1, Array(...))` จากนั้นก็ค่อยเก็บลงดิสก์ ซึ่งขั้นตอนนี้ก็จะคล้ายกับการพาร์ทิชันของ Mapper ใน Hadoop
+  - Stage 1 มี 36 ResultTask แต่ละ Task ก็จะดึงและสับเปลี่ยนข้อมูลที่ต้องการจะประมวลผล ในขณะที่อยู่ขั้นตอนของการดึงข้อมูลและทำงานคำสั่ง mapPartitions() ก็จะเกิดการรวบรวมข้อมูลไปด้วย ถัดจากนั้น count() จะถูกเรียกใช้เพื่อให้ได้ผลลัพธ์ ตัวอย่างเช่น สำหรับ ResultTask ที่รับผิดชอบกระกร้าของ 3 ก็จะดึงข้อมูลทุกตัวที่มี Key 3 จาก Worker เข้ามารวมไว้ด้วยกันจากนั้นก็จะรวบรวมภายในโหนดของตัวเอง
+  - หลังจากที่ Task ถูกประมวลผลไปแล้วตัวไดรว์เวอร์ก็จะรวบรวมผลลัพธ์กลับมาแล้วหาผลรวมที่ได้จาก Task ทั้งหมด 
+  - Job 1 เสร็จเรียบร้อย
 
-We can see that the physical plan is not simple. An Spark application can contain multiple jobs, each job could have multiple stages, and each stage has multiple tasks. **Later we'll see how the jobs are defined as well as how the stages and tasks are created**
+เราจะเห็นว่า Physical plan มันไม่ง่าย ยิ่ง Spark สามารถมี Job ได้หลาย Job แถมแต่ละ Job ยังมี Stage ได้หลาย Stage pังไม่พอแต่ละ Stage ยังมีได่้หลาย Tasks **หลังจากนี้เราจะคุยกันว่าทำไมต้องกำหนด Job และต้องมี Stage กับ Task เข้ามาให้วุ่นวายอีก**
 
-## Discussion
-So now we have a basic knowledge about a Spark job's creation and execution. We also discussed the cache feature of Spark.
-In the following chapters we'll discuss in detail the key steps related to job creation and execution, including:
-  1. logical plan generation
-  2. physical plan generation
-  3. Job submission and scheduling
-  4. Task's creation, execution and result handling
-  5. How shuffle is done in Spark
-  6. Cache mechanism
-  7. Broadcast mechanism
+## การพูดคุย
+โอเค ตอนนี้เรามีความรู้เบื้อตั้งเกี่ยวกับ Job ของ Spark ทั้งการสร้่างและการทำงานแล้ว ต่อไปเราจะมีการพูดคุยถึงเรื่องการแคชของ Spark ด้วย ในหัวข้อต่อไปจะคุยกรันถึงรายละเอียดในเรื่อง Job ดังนี้:
+  1. การสร้าง Logical plan
+  2. การสร้าง Physical plan
+  3. การส่ง Job และ Scheduling
+  4. การสร้าง การทำงานและการจัดการกับผลลัพธ์ของ Task 
+  5. การเรียงสับเปลี่ยนของ Spark
+  6. กลไกของแคช
+  7. กลไก Broadcast
