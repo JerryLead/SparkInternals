@@ -1,40 +1,38 @@
 # Job Logical Plan
 
-## An example of general logical plan
+## ตัวย่างการสร้าง Logical plan
 ![deploy](../PNGfigures/GeneralLogicalPlan.png)
 
-The picture above illustrates a general job logical plan which takes 4 steps to get the final result:
+แผนภาพด้านบนอธิบายให้เห็นว่าขั้นตอนของแผนมาอยู่ 4 ขั้นตอนเพื่อให้ได้ผลลัพธ์สุดท้ายออกมา
 
-1.	Construct the initial `RDD` from any source.(in-memory data, local file, HDFS, HBase, etc). (Note that `parallelize()` is equivalent to `createRDD()` mentioned in the previous chapter)
+1.	เริ่มต้นสร้าง `RDD` จากแหล่งไหนก็ได้.(in-memory data, ไฟล์บนเครื่อง, HDFS, HBase, etc). (ข้อควรทราบ `parallelize()` มีความหมายเดียวกับ `createRDD()` ที่เคยกล่าวถึงในบนที่แล้ว)
 
-2.	A series of *transformation operations* on `RDD`, denoted as `transformation()`, each `transformation()` produces one or more `RDD[T]`s, where `T` can be any type in Scala.
+2.	ซีรีย์ของ *transformation operations* หรือการกระทำการแปลงบน `RDD` แสดงโดย `transformation()` แต่ละ `transformation()` จะสร้าง `RDD[T]` ตั้งแต่ 1 ขึ้นไป โดยที่ `T` สามารถเป็นตัวแปรประเภทใดๆ ของ Scala ก็ได้ (เขียนใน Scala)
 
-	>	Need to mention that, for key-value pair `RDD[(K, V)]`, it will be handy if `K` is a basic type, like `Int`, `Double`, `String`, etc. It can not be collection type, like `Array`, `List`, etc, since it is hard to define `partition` function on collections
+	>	ข้อควรทราบ สำหรับคู่ Key/Value ลักษณะ `RDD[(K, V)]` นั้นมันจะจัดการง่ายถ้า K เป็นตัวแปรประเภทพื้นฐาน เช่น like `Int`, `Double`, `String` เป็นต้น แต่มันไม่สามรถทำได้ถ้ามันเป็นตัวแปรชนิด Collection เช่น `Array` หรือ `List` เพราะมันจะจัดการได้ยากมากตอนขั้นตอนการสร้างพาร์ทิชันฟังก์ชันของตัวแปรพวก Collection
+	
+3.	*Action operation* แสดงโดย `action()` จะเรียกใช้ที่ `RDD` ตัวสุดท้ายจากนั้นในแต่ละพาร์ทิชันก็จะสร้างผลลัพธ์ออกมา
 
-3.	*Action operation*, denoted as `action()` is called on final `RDD`, then each partition produces a result
+4.	ผลลัพธ์เหล่านี้จะถูกส่งไปที่ไดรว์เวอร์จากนั้น `f(List[Result])` จะคำนวณผลลัพธ์สุดท้ายที่จะถูกส่งกลับไปบอกไคลเอนท์ ตัวอย่างเช่น `count()` จะเกิด 2 ขั้นตอนคำ `action()` และ `sum()`
 
-4.	These results will be sent to the driver, then `f(List[Result])` will be computed as the final result to client side, for example, `count()` takes two steps, `action()` and `sum()`.
+> RDD สามารถที่จะแคชและเก็บไว้ในหน่วยความจำหรือดิสก์โดยเรียกใช้ `cache()`, `persist()` หรือ `checkpoint()` จำนวนพาร์ทิชันโดยปกติถูกกำหนดโดยผู้ใช้ ความสัมพธ์ของการพาร์ทิชันระหว่าง 2 RDD ไม่สามารถเป็นแบบ 1 to 1 ได้ และในตัวอย่างด้านบเราจะเห็นว่าไม่ใช้แค่ความสัมพันธ์แบบ 1 to 1 แต่เป็น Many to Many ด้วย
 
-> RDD can be cached into memory or on hard disk, by calling `cache()`, `persist()` or `checkpoint()`. The number of partitions is usually set by user. Partition relationship between 2 RDDs can be not 1 to 1. In the picture above, we can see not only 1 to 1 relationship, but also many to many ones.
+## แผนเชิงตรรกะ Logical Plan
 
-## Logical Plan
+ตอนที่เขียนโค้ดของ Spark คุณก็จะต้องมีแผนภาพการขึ้นต่อกันอยู่ในหัวแล้ว (เหมือนตัวอย่างที่อยู่ข้างบน) แต่ไอ้แผนที่วางไว้มันจะเป็นจริงก็ต่อเมื่อ `RDD` ถูกทำงานจริง (มีคำสั่งmี่เป็นการกระทำ Action)		
 
-When writing your spark code, you might also have a dependency diagram in you mind (like the one above). However, the reality is that some more `RDD`s will be produced.
+เพื่อที่จะให้เข้าใจชัดเจนยิ่งขึ้นเราจะคุยกันในเรื่องของ		
+-	จะสร้าง RDD ได้ยังไง ? RDD แบบไหนถึงจะประมวลผล ?		
+-	จะสร้างความสัมพันธ์ของการขึ้นต่อกันของ RDD ได้อย่างไร ?		
 
-In order to make this more clear, we will talk about :
+###	1. จะสร้าง RDD ได้ยังไง ? RDD แบบไหนถึงจะประมวลผล ?
 
--	How to produce RDD ? What kind of RDD should be produced ?
--	How to build dependency relationship between RDDs ?
+คำสั่งพวก `transformation()` โดยปกติจะคืนค่าเป็น `RDD` แต่เนื่องจาก `transformation()` นั้นมีการแปลงที่ซับซ้อนทำให้มี sub-`transformation()` หรือการแปลงย่อยๆเกิดขึ้นนั่นทำให้เกิด RDD หลายตัวขึ้นได้นั้นเป็นเหตุผลที่ว่าทำไม RDD ถึงมีเยอะ กซึ่งในความเป็นจริงแล้วมันเยอะมากกว่าที่เราคิดซะอีก		
+Logical plan นั้นจำเป็นสำหรับ *computing chain* ทุกๆ `RDD` จะมี `compute()` ซึ่งจะรับเรคอร์ดข้อมูลจาก `RDD` ก่อนหน้าหรือจากแหล่งข้อมูลมา จากนั้นจะแปลงตาม `transformation()` แล้วให้ผลลัพธ์ส่งออกมาเป็นเรคอร์ดที่ถูกประมวลผลแล้ว
 
-###	1. How to produce RDD? What RDD should be produced?
+คำถามต่อมาคือแล้ว `RDD` อะไรที่ถูกประมวลผล? คำตอบก็ขึ้นอยู่กับว่าประมวลผลด้วยตรรกะอะไร [transformation()](http://spark.apache.org/docs/latest/programming-guide.html#transformations) และเป็น RDD อะไรที่รับไปประมวลผลได้
 
-A `transformation()` usually returns a new `RDD`, but some `transformation()`s which are more complicated and contain several sub-`transformation()` produce multiple `RDD`s. That's why the number of RDDs is, in fact, more than we thought.
-
-Logical plan is essentially a *computing chain*. Every `RDD` has a `compute()` method which takes the input records of the previous `RDD` or data source, then performs `transformation()`, finally outputs computed records.
-
-What `RDD` to be produced depends on the computing logic. Let's talk about some typical [transformation()](http://spark.apache.org/docs/latest/programming-guide.html#transformations) and the RDDs they produce.
-
-We can learn about the meaning of each `transformation()` on Spark site. More details are listed in the following table, where `iterator(split)` means *for each record in partition*. There are some blanks in the table, because they are complex `transformation()` producing multiple RDDs, they will be illustrated soon after.
+เราสามารถเรียนรู้เกี่ยวกับความหมาบของแต่ละ `transformation()` ได้บนเว็บของ Spark ส่วนรายละเอียดที่แสดงในตารางด้านล่างนี้ ยกมาเมื่อ `iterator(split)` หมายถึง *สำหรับทุกๆเรคอร์ดในพาร์ทิชัน* ช่องที่ว่างในตารางเป็นเพราะความซับซ้อนของ `transformation()` ทำให้ได้ RDD หลายตัวออกมา เดี๋ยวจะได้เห็นภาพต่อไป
 
 | Transformation |  Generated RDDs | Compute() |
 |:-----|:-------|:---------|
@@ -57,61 +55,61 @@ We can learn about the meaning of each `transformation()` on Spark site. More de
 | **coalesce**(numPartitions) | | |
 | **repartition**(numPartitions) | | |
 
-###	2. How to build RDD relationship?
+###	2. จะสร้างความสัมพันธ์ของการขึ้นต่อกันของ RDD ได้อย่างไร ?
 
-We need to figure out the following things:
--	RDD dependencies. `RDD x` depends on one parent RDD or several parent RDDs?
--	How many partitions are there in `RDD x`?
--	What's the relationship between the partitions of `RDD x` and those of its parent RDD(s)? One partition depends one or several partition of parent RDD?
+เราอยากจะชี้ให้เห็นถึงสิ่งต่อไปนี้:		
+-	การขึ้นต่อกันของ RDD, `RDD x` สามารถขึ้นต่อ RDD พ่อแม่ได้ 1 หรือหลายตัว ?
+-	มีพาร์ทิชันอยู่เท่าไหร่ใน `RDD x`?
+-	อะไรที่เป็นความสัมพันธ์ระหว่างพาร์ทิชันของ `RDD x` กับพวกพ่อแม่ของมัน? 1 พาร์ทิชันขึ้นกับ 1 หรือหลายพาร์ทิชันหรอ ?
 
-The first question is trivial, such as `x = rdda.transformation(rddb)`, e.g., `val x = a.join(b)` means that `RDD x` depends both `RDD a` and `RDD b`
+คำถามแรกนั้นจิ๊บจ้อยมาก ยกตัวอย่างเช่น `x = rdda.transformation(rddb)`, e.g., `val x = a.join(b)` หมายความว่า `RDD x` ขึ้นต่อ `RDD a` และ `RDD b` (แหงหล่ะเพราะ x เกิดจากการรวมกันของ a และ b หนิ)
 
-For the second question, as mentioned before, the number of partitions is defined by user, by default, it takes `max(numPartitions[parent RDD 1], ..., numPartitions[parent RDD n])`
+สำหรับคำถามที่สอง อย่างที่ได้บอกไว้ก่อนหน้านี้แล้วว่าจำนวนของพาร์ทิชันนั้นถูกกำหนดโดยผู้ใช้ ค่าเริ่มต้นของมันก็คือมันจะเอาจำนวนพาร์ทิชันที่มากที่สุดของพ่อแม่มันมา) by default, it takes `max(numPartitions[parent RDD 1], ..., numPartitions[parent RDD n])`
 
-The third one is a little bit complex, we need to consider the meaning of a `transformation()`. Different `transformation()`s have different dependency. For example, `map()` is 1:1, while `groupByKey()` produces a `ShuffledRDD` in which each partition depends on all partitions in its parent RDD. Besides this, some `transformation()` can be more complex.
+คำถามสุดท้ายซับซ้อนขึ้นมาหน่อย เราต้องรู้ความหมายของการแปลง `transformation()` ซะก่อน เนื่องจาก `transformation()`แต่ละตัวมีการขึ้นต่อกันที่แตกต่างกันออกไป ยกตัวอย่าง `map()` เป็น 1:1 ในขณะที่ `groupByKey()` ก่อให้เกิด `ShuffledRDD` ซึ่งในแต่ละพาร์ทิชันก็จะขึ้นต่อทุกพาร์ทิชันที่เป็นพ่อแม่ของมัน นอกจากนี้บาง `transformation()` ยังซับซ้อนขึ้นไปกว่านี้อีก
 
-In spark, there are 2 kinds of dependencies which are defined in terms of parent RDD's partition:
+ใน Spark จะมีการขึ้นต่อกันอยู่ 2 แบบ ซึ่งกำหนดในรูปของพาร์ทิชันของพ่อแม่:
+
 -	NarrowDependency (OneToOneDependency, RangeDependency)
+	
+	>	แต่ละพาร์ทิชันของ RDD ลูกจะขึ้นอยู่กับพาร์ทิชันของแม่ไม่กี่ตัว เช่น พาร์ทิชันของลูกขึ้นต่อ **ทั่วทั้ง** พาร์ทิชันของพ่อแม่ (**full dependency**)
+	
+-	ShuffleDependency (หรือ Wide dependency, กล่าวถึงในเปเปอร์ของ Matei)
 
-	>	each partition of the child RDD depends on a small number of partitions of the parent RDD, i.e. a child partition depends the **entire** parent partition. (**full dependency**)
--	ShuffleDependency (or wide dependency, mentioned in Matei's paper)
+	>	พาร์ทิชันลูกหลายส่วนขึ้นกับพาร์ทิชันพ่อแม่ เช่นในกรณีที่แต่ละพาร์ทิชันของลูกขึ้นกับ **บางส่วน** ขอวพาร์ทิชันพ่อแม่ (**partial dependency**)
 
-	>	multiple child partitions depends on a parent partition, i.e. each child partition depends **a part of** the parent partition. (**partial dependency**)
+ยกตัวอย่าง `map` จะทำให้เกิด Narrow dependency ขณะที่ `join` จะทำให้เกิด Wide dependency (เว้นแต่ว่าในกรณีของพ่อแม่ที่เอามา `join` กันทั้งคู่เป็น Hash-partitioned)
 
-For example, `map` leads to a narrow dependency, while `join` leads to to wide
-dependencies (unless the two parents are hash-partitioned).
+ในอีกนัยหนึ่งแต่ละพาร์ทิชันของลูกสามารถขึ้นต่อพาร์ทิชันพ่อแม่ตัวเดียว หรือขึ้นต่อบางพาร์ทิชันของพ่อแม่เท่านั้น
 
-On the other hand, each child partition can depend on one partition in parent RDD, or some partitions in parent RDD.
+ข้อควรรู้:
+-	สำหรับ `NarrowDependency` จะรู้ว่าพาร์ทิชันลูกต้องการพาร์ทิชันพ่อแม่หนึ่งหรือหลายตัวมันขึ้นอยู่กับฟังก์ชัน `getParents(partition i)` ใน `RDD` ตัวลูก (รายละเอียดเดี๋ยวจะตามมาทีหลัง)
+-	ShuffleDependency คล้ายกัย Shuffle dependency ใน MapReduce [ผู้แปล:น่าจะหมายถึงเปเปอร์ของ Google]（ตัว Mapper จะทำพาร์ทิชันเอาท์พุท, จากนั้นแต่ละ Reducer จะดึงพาร์ทิชันที่มันจำเป็นต้องใช้จากพาร์ทิชันที่เป็นเอาท์พุทจาก Mapper ผ่านทาง http.fetch)
 
-Note that:
--	For `NarrowDependency`, whether a child partition needs one or multiple parent partition depends on `getParents(partition i)` function in child RDD. (More details later)
--	ShuffleDependency is like shuffle dependency  in MapReduce（mapper partitions its output, then each reducer will fetch all the needed output partitions via http.fetch)
-
-The two dependencies are illustrated in the following picture.
+ความขึ้นต่อกันทั้งสองแสดงได้ตามแผนภาพข้างล่าง.
 
 ![Dependency](../PNGfigures/Dependency.png)
 
-According to the definition, the two on the first row are `NarrowDependency` and the last one is `ShuffleDependency`.
+ตามที่ให้คำจำกัดความไปแล้ว เราจะเห็นว่าสองภาพที่อยู่แถวบนเป็น `NarrowDependency` และภาพสุดท้ายจะเป็น `ShuffleDependency`.
 
-Need to mention that the left one on the second row is a very rare case between two RDD. It is a `NarrowDependency` (N:N) whose logical plan is like ShuffleDependency, but it is a full dependency. It can be created by some tricks. We will not talk about this, because, more strictly, `NarrowDependency` essentially means **each partition of the parent RDD is used by at most one partition of the child RDD**. Some typical RDD dependencies will be talked about soon.
+แล้วภาพล่างซ้ายหล่ะ? กรณีนี้เป็นกรณีที่เกิดขึ้นได้น้อยระหว่างlอง `RDD` มันคือ `NarrowDependency` (N:N) Logical plan ของมันจะคล้ายกับ `ShuffleDependency` แต่มันเป็น Full dependency มันสามารถสร้างขึ้นได้ด้วยเทคนิคบางอย่างแต่เราจะไม่คุยกันเรื่องนี้เพราะ `NarrowDependency` เข้มงวดมากเรื่องความหมายของมันคือ **แต่ละพาร์ทิชันของพ่อแม่ถูกใช้โดยพาร์ทิชันของ RDD ลูกได้อย่างมากพาร์ทิชันเดียว** บางแบบของการขึ้นต่อกันของ RDD จะถูกเอามาคุยกันเร็วๆนี้
 
-To conclude, partition dependencies are listed as below
-- NarrowDependency (black arrow)
-	- RangeDependency -> only for UnionRDD
-	- OneToOneDependency (1:1) -> e.g. map, filter
-	- NarrowDependency (N:1) -> e.g. join co-partitioned
-	- NarrowDependency (N:N) -> rare case
-- ShuffleDependency (red arrow)
+โดยสรุปคร่าวๆ พาร์ทิชันขึ้นต่อกันตามรายการด้านล่างนี้
+- NarrowDependency (ลูกศรสีดำ)
+	- RangeDependency -> เฉพาะกับ UnionRDD
+	- OneToOneDependency (1:1) -> พวก map, filter
+	- NarrowDependency (N:1) -> พวก join co-partitioned
+	- NarrowDependency (N:N) -> เคสหายาก
+- ShuffleDependency (ลูกศรสีแดง)
 
-Note that, in the rest of this chapter, `NarrowDependency` will be represented by black arrow and `ShuffleDependency` are red ones.
+โปรดทราบว่าในส่วนที่เหลือของบทนี้ `NarrowDependency` จะถูกแทนด้วยลูกศรสีดำและ `ShuffleDependency` จะแทนด้วยลูกษรสีแดง
 
-`NarrowDependency` and `ShuffleDependency` are needed for physical plan which will be talked about in the next chapter.
+`NarrowDependency` และ `ShuffleDependency` จำเป็นสำหรับ Physical plan ซึ่งเราจะคุยกันในบทถัดไป
+**เราจะประมวลผลเรคอร์ดของ RDD x ได้ยังไง**
 
-**How to compute records in RDD x**
+กรณี `OneToOneDependency` จะถูกแสดงในภาพด้านล่าง ถึงแม้ว่ามันจะเป็นความสัมพันธ์แบบ 1 ต่อ 1 ของสองพาร์ทิชันแต่นั้นก็**ไม่ได้**หมายถึงเรคอร์ดจะถูกประมวลผลแบบหนึ่งต่อหนึ่ง
 
-An `OneToOneDependency` case is shown in the picture below. Although it is a 1 to 1 relationship between two partitions, it doesn't mean that records are read and computed one by one.
-
-The difference between the two patterns on the right side is similar to the following code snippets.
+ความแตกต่างระหว่างสองรูปแบบของสองฝั่งนี้จะเหมือนโค้ดที่แสดงสองชุดข้างล่าง
 
 ![Dependency](../PNGfigures/OneToOneDependency.png)
 
@@ -127,59 +125,58 @@ int[] array = {1, 2, 3, 4, 5}
 f(array)
 ```
 
-### 3. Illustration of typical dependencies and their computation
+### 3. ภาพอธิบายประเภทการขึ้นต่อกันของการคำนวณ
 
 **1) union(otherRDD)**
 
 ![union](../PNGfigures/union.png)
 
-`union()` simply combines two RDDs together. It never changes  data of a partition. `RangeDependency`(1:1) retains the borders of original RDDs in order to make it easy to revisit the partitions from RDD produced by `union()`
+`union()` เป็นการรวมกัยง่ายๆ ระหว่างสอง RDD เข้าไว้ด้วยกัน**โดยไม่เปลี่ยน**พาร์ทิชันของข้อมูล `RangeDependency`(1:1) ยังคงรักษาขอบของ RDD ดั้งเดิมไว้เพื่อที่จะยังคงความง่ายในการเข้าถึงพาร์ทิชันจาก RDD ที่ถูกสร้างจากฟังก์ชัน `union()`
 
-**2) groupByKey(numPartitions)** [changed in 1.3]
+**2) groupByKey(numPartitions)** [เปลี่ยนใน Spark 1.3]
 
 ![groupByKey](../PNGfigures/groupByKey.png)
 
-We have talked about `groupByKey`'s dependency before, now we make it more clear.
+เราเคยคุยกันถึงการขึ้นต่อกันของ `groupByKey` มาก่อนหน้านี้แล้ว ตอนนี้เราจะมาทำให้มันชัดเจนขึ้น
 
-`groupByKey()` combines records with the same key by shuffle. The `compute()` function in `ShuffledRDD` fetches necessary data for its partitions, then take `mapPartition()` operation (like `OneToOneDependency`), `MapPartitionsRDD` will be produced by `aggregate()`. Finally, `ArrayBuffer` type in the value is casted to `Iterable`
+`groupByKey()` จะรวมเรคอร์ดที่มีค่า Key ตรงกันเข้าไว้ด้วยกันโดยใช้วิธีสับเปลี่ยนหรือ Shuffle ฟังก์ชัน `compute()` ใน `ShuffledRDD` จะดึงข้อมูลที่จำเป็นสำหรับพาร์ทิชันของมัน จากนั้นทำคำสั่ง `mapPartition()` (เหมือน `OneToOneDependency`), `MapPartitionsRDD` จะถูกผลิตจาก `aggregate()` สุดท้ายแล้วชนิดข้อมูลของ Value คือ `ArrayBuffer` จะถูก Cast เป็น `Iterable`
 
->	`groupByKey()` has no map side combine, because map side combine does not reduce the amount of data shuffled and requires all map side data be inserted into a hash table, leading to more objects in the old gen.
+>	`groupByKey()` จะไม่มีการ Combine เพื่อรวมผลลัพธ์ในฝั่งของ Map เพราะการรวมกันมาจากฝั่งนั้นไม้่ได้ทำให้จำนวนข้อมูลที่ Shuffle ลดลงแถมยังต้องการให้ฝั่ง Map เพิ่มข้อมูลลงใน Hash table ทำให้เกิด Object ที่เก่าแล้วเกิดขึ้นในระบบมากขึ้น		
+>	`ArrayBuffer` จะถูกใช้เป็นหลัก ส่วน `CompactBuffer` มันเป็นบัฟเฟอร์แบบเพิ่มได้อย่างเดียวซึ่งคล้ายกับ ArrayBuffer แต่จะใช้หน่วยความจำได้มีประสิทธิภาพมากกว่าสำหรับบัฟเฟอร์ขนาดเล็ก (ตในส่วนนี้โค้ดมันอธีบายว่า ArrayBuffer ต้องสร้าง Object ของ Array ซึ่งเสียโอเวอร์เฮดราว 80-100 ไบต์			
 
->	`ArrayBuffer` is essentially `a CompactBuffer` which is an append-only buffer similar to ArrayBuffer, but more memory-efficient for small buffers.
-
-**2) reduceyByKey(func, numPartitions)** [changed in 1.3]
+**3) reduceyByKey(func, numPartitions)** [เปลี่ยนแปลงในรุ่น 1.3]
 
 ![reduceyByKey](../PNGfigures/reduceByKey.png)
 
-`reduceByKey()` is similar to `MapReduce`. The data flow is equivalent. `redcuceByKey` enables map side combine by default, which is carried out by `mapPartitions` before shuffle and results in `MapPartitionsRDD`. After shuffle, `aggregate + mapPartitions` is applied to `ShuffledRDD`. Again, we get a `MapPartitionsRDD`
+`reduceByKey()` คล้ายกับ `MapReduce` เนื่องจากการไหลของข้อมูลมันเป็นไปในรูปแบบเดียวกัน `redcuceByKey` อนุญาตให้ฝั่งที่ทำหน้าที่ Map ควบรวม (Combine) ค่า Key เข้าด้วยกันเป็นค่าเริ่มต้นของคำสั่ง และคำสั่งนี้กำเนินการโดย `mapPartitions` ก่อนจะสับเปลี่ยนและให้ผลลัพธ์มาในรูปของ `MapPartitionsRDD` หลังจากที่สับเปลี่ยนหรือ Shuffle แล้วฟังก์ชัน `aggregate + mapPartitions` จะถูกนำไปใช้กับ `ShuffledRDD` อีกครั้งแล้วเราก็จะได้ `MapPartitionsRDD`
 
-**3) distinct(numPartitions)**
+**4) distinct(numPartitions)**
 
 ![distinct](../PNGfigures/distinct.png)
 
-`distinct()` aims to deduplicate RDD records. Since duplicated records can be found in different partitions, shuffle is needed to deduplicate records by using `aggregate()`. However, shuffle need `RDD[(K, V)]`. If the original records have only keys, e.g. `RDD[Int]`, then it should be completed as `<K, null>` by `map()` (`MappedRDD`). After that, `reduceByKey()` is used to do some shuffle (mapSideCombine->reduce->MapPartitionsRDD). Finally, only key is taken from <K, null> by `map()`(`MappedRDD`). `ReduceByKey()` RDDs are colored in blue
+`distinct()` สร้างขึ้นมาเพื่อที่จะลดความซ้ำซ้อนกันของเรคอร์ดใน RDD เนื่องจากเรคอร์ดที่ซ้ำกันสามารถเกิดได้ในพาร์ทิชันที่ต่างกัน กลไกการ Shuffle จำเป็นต้องใช้ในการลดความซ้ำซ้อนนี้โดยการใช้ฟังก์ชัน `aggregate()` อย่างไรก็ตามกลไก Shuffle ต้องการ RDD ในลักษณะ `RDD[(K, V)]` ซึ่งถ้าเรคอร์ดมีแค่ค่า Key เช่น `RDD[Int]` ก็จะต้องทำให้มันอยู่ในรูปของ `<K, null>` โดยการ `map()` (`MappedRDD`) หลังจากนั้น `reduceByKey()` จะถูกใช้ในบาง Shuffle (mapSideCombine->reduce->MapPartitionsRDD) ท้ายสุดแล้วจะมีแค่ค่า Key ทีถูกยิบไปจากคุ่ <K, null> โดยใช้ `map()`(`MappedRDD`). `ReduceByKey()` RDDs จะใช้สีน้ำเงิน (ดูรูปจะเข้าใจมากขึ้น)
 
-**4) cogroup(otherRDD, numPartitions)**
+**5) cogroup(otherRDD, numPartitions)**
 
 ![cogroup](../PNGfigures/cogroup.png)
 
-Different from `groupByKey()`, `cogroup()` aggregates 2 or more RDDs. **What's the relationship between GoGroupedRDD and (RDD a, RDD b)? ShuffleDependency or OneToOneDependency？**
+มันแตกต่างจาก `groupByKey()`, ตัว `cogroup()` นี้จะรวม RDD ตั้งแต่ 2 หรือมากกว่าเข้ามาไว้ด้วยกัน **อะไรคือความสัมพันธ์ระหว่าง GoGroupedRDD และ (RDD a, RDD b)? ShuffleDependency หรือ OneToOneDependency？**
 
--	number of partition
+-	จำนวนของพาร์ทิชัน
 
-	The # of partition in `CoGroupedRDD` is defined by user, it has nothing to do with `RDD a` and `RDD b`. However, if #partition of `CoGroupedRDD` is different from the one of `RDD a/b`, then it is not an `OneToOneDependency`.
+	จำนวนของพาร์ทิชันใน `CoGroupedRDD` จะถูกำหนดโดยผูใช้ซึ่งมันจะไม่เกี่ยวกับ `RDD a` และ `RDD b` เลย อย่างไรก็ดีถ้าจำนวนพาร์ทิชันของ `CoGroupedRDD` แตกต่างกับตัว `RDD a/b` มันก็จะไม่เป็น `OneToOneDependency` 
 
--	type of partitioner
+-	ชนิดของตังแบ่งพาร์ทิชัน
 
-	The `partitioner` defined by user (`HashPartitioner` by default) for `cogroup()` decides where to put the its results. Even if `RDD a/b` and `CoGroupedRDD` have the same # of partition, while their partitioner are different, it can not be `OneToOneDependency`. Let's take the examples in the picture above, `RDD a` is `RangePartitioner`, `RDD b` is `HashPartitioner`, and `CoGroupedRDD` is `RangePartitioner` with the same # partition as `RDD a`. Obviously, the records in each partition of `RDD a` can be directly sent to the corresponding partitions in `CoGroupedRDD`, but those in `RDD b` need to be divided in order to be shuffled into the right partitions of `CoGroupedRDD`.
+	ตังแบ่งพาร์ทิชันหรือ `partitioner` จะถูกกำหนดโดยผู้ใช้ (ถ้าผู้ใช้ไม่ตั้งค่าเริ่มต้นคือ `HashPartitioner`) สำหรับ `cogroup()` แล้วมันเอาไว้พิจารณาว่าจะวางผลลัพธ์ของ cogroup ไว้ตรงไหน ถึงแม้ว่า `RDD a/b` และ `CoGroupedRDD` จะมีจำนวนของพาร์ทิชันเท่ากัน ในขณะที่ตัวแบ่งพาร์ทิชันต่างกัน มันก็ไม่สามารถเป็น `OneToOneDependency` ได้. ดูได้จากภรูปข้างบนจะเห็นว่า `RDD a` มีตัวแบ่งพาร์ทิชันเป็นชนิด `RangePartitioner`, ส่วน `RDD b` มีตัวแบ่งพาร์ทิชันเป็นชนิด `HashPartitioner`, และ `CoGroupedRDD` มีตัวแบ่งพาร์ทิชันเป็นชนิด `RangePartitioner` โดยที่จำนวนพาร์ทิชันมันเท่ากับจำนวนพาร์ทิชันของ `RDD a`. หากสังเกตจะพบได้อย่างชัดเจนว่าเรคอร์ดในแต่ละพาร์ทิชันของ `RDD a` สามารถส่งไปที่พาร์ทิชันของ `CoGroupedRDD` ได้เลย แต่สำหรับ `RDD b` จำถูกแบ่งออกจากกัน (เช่นกรณีพาร์ทิชันแรกของ `RDD b` ถูกแบ่งออกจากกัน) แล้วสับเปลี่ยนไปไว้ในพาร์ทิชันที่ถูกต้องของ `CoGroupedRDD`
 
-To conclude, `OneToOneDependency` occurs iff the partitioner type and #partitions of 2 RDDs and `CoGroupedRDD` are the same, otherwise, the dependency must be a `ShuffleDependency`. More details can be found in `CoGroupedRDD.getDependencies()`'s source code
+โดยสรุปแล้ว `OneToOneDependency` จะเกิดขึ้นก็ต่อเมื่อชนิดของตัวแบ่งพาร์ทิชันและจำนวนพาร์ทิชันของ 2 RDD และ `CoGroupedRDD` เท่ากัน ไม่อย่างนั้นแล้วมันจะต้องเกิดกระบวนการ `ShuffleDependency` ขึ้น สำหรับรายละเอียดเชิงลึกหาอ่านได้ที่โค้ดในส่วนของ `CoGroupedRDD.getDependencies()`
 
-**How does spark deal with the fact that `CoGroupedRDD`'s partition depends on multiple parent partitions?**
+**Spark มีวิธีจัดการกับความจริงเกี่ยวกับ `CoGroupedRDD` ที่พาร์ทิชันมีการขึ้นต่อกันบนหลายพาร์ทิชันของพ่อแม่ได้อย่างไร**
 
-Firstly, `CoGroupedRDD` put all needed `RDD` into `rdds: Array[RDD]`
+อันดับแรกเลย `CoGroupedRDD` จะวาง `RDD` ที่จำเป็นให้อยู่ในรูปของ `rdds: Array[RDD]`
 
-Then,
+จากนั้น,
 ```
 Foreach rdd = rdds(i):
 	if CoGroupedRDD and rdds(i) are OneToOneDependency
@@ -188,78 +185,77 @@ Foreach rdd = rdds(i):
 		Dependecy[i] = new ShuffleDependency(rdd)
 ```
 
-Finally, it returns `deps: Array[Dependency]` which is an array of `Dependency` corresponding to  each parent RDD.
+สุดท้ายแล้วจำคืน `deps: Array[Dependency]` ออกมา ซึ่งเป็นอาเรย์ของการขึ้นต่อกัน `Dependency` ที่เกี่ยวข้องกับแต่และ RDD พ่อแม่ corresponding to  each parent RDD.
 
-`Dependency.getParents(partition id)` returns `partitions: List[Int]` which are the necessary parent partitions of the specified partition (`partition id`) with respect to the given `Dependency`
+`Dependency.getParents(partition id)` คืนค่า `partitions: List[Int]` ออกมาซึ่งคือพาร์ทิชันที่จำเป็นเพื่อสร้างพาร์ทิชันไอดีนี้ (`partition id`) ใน `Dependency` ที่กำหนดให้ 
 
-`getPartitions()` tells how many partitions are in `RDD` and how each partition is serialized.
+`getPartitions()` เอาไว้บอกว่ามีพาร์ทิชันใน `RDD` อลู่เท่าไหร่และบอกว่าแต่ละพาร์ทิชัน serialized ไว้อย่างไร
 
-**5) intersection(otherRDD)**
+**6) intersection(otherRDD)**
 
 ![intersection](../PNGfigures/intersection.png)
 
-`intersection()` aims to extract all the common elements from  `RDD a and b`. `RDD[T]` is mapped into `RDD[(T, null)]`, where `T` can not be any collections, then `a.cogroup(b)` (colored in blue). `filter()` only keeps records where neither of `[iter(groupA()), iter(groupB())]` is empty (`FilteredRDD`). Finally, only `keys()` are kept (`MappedRDD`)
+`intersection()` ตั้งใจให้กระจายสมาชิกทุตัวของ `RDD a and b`. `RDD[T]` จะถูก Map ให้อยู่ในรูป `RDD[(T, null)]`, ซึ่งตัว `T` ไม่สามารถเป็น Collection ได้ (T เป็นชนิดของตัวแปร ไม่สามารถเป็น Collection เช่นพวก Array, List ได้) จากนั้น `a.cogroup(b)` (แสดงด้วยสำน้ำเงิน). `filter()` เอาเฉพาะ `[iter(groupA()), iter(groupB())]` ไม่มีตัวไหนเป็นค่าว่าง (`FilteredRDD`) สุดท้ายแล้วมีแค่ `keys()` ที่จะถูกเก็บไว้ (`MappedRDD`)
 
-6) **join(otherRDD, numPartitions)**
+**7)join(otherRDD, numPartitions)**
 
 ![join](../PNGfigures/join.png)
 
-`join()` takes two `RDD[(K, V)]`, like `join` in SQL. Similar to `intersection()`, it does `cogroup()` first and results in a `MappedValuesRDD` whose type is `RDD[(K, (Iterable[V1], Iterable[V2]))]`, then compute the Cartesian product between the two `Iterable`, finally `flatMap()` is called.
+`join()` รับ `RDD[(K, V)]` มา 2 ตัว, คล้ายๆกับการ `join` ใน SQL. และคล้ายกับคำสั่ง `intersection()`, มันใช้ `cogroup()` ก่อนจากนั้นให้ผลลัพธ์เป็น  `MappedValuesRDD` ชนิดของพวกมันคือ `RDD[(K, (Iterable[V1], Iterable[V2]))]` จากนันหาผลคูณคาร์ทีเซียน `Cartesian product` ระหว่างสอง `Iterable`, ขั้นตอนสุดท้ายเรียกใช้ฟังก์ชัน `flatMap()`.
 
-Here are two examples, in the first one, `RDD 1` and `RDD 2` use `RangePartitioner`, `CoGroupedRDD` takes `HashPartitioner` which is different from `RDD 1/2`, so it's a `ShuffleDependency`. In the second one, `RDD 1` is initially partitioned on key by `HashPartitioner` and gets 3 partition which is the same as the one `CoGroupedRDD` takes, so it's a `OneToOneDependency`. Furthermore, if `RDD 2` is also initially divided by `HashPartitioner(3)`, then there is no `ShuffleDependency`. This kind of `join` is called `hashjoin()`
+นี่เป็นตัอย่างสองตัวอย่างของ `join` กรณีแรก, `RDD 1` กับ `RDD 2` ใช้ `RangePartitioner` ส่วน `CoGroupedRDD` ใช้ `HashPartitioner` ซึ่งแตกต่างกับ `RDD 1/2` ดังนั้นมันจึงมีการเรียกใช้ `ShuffleDependency`. ในกรณีที่สอง, `RDD 1` ใช้ตัวแบ่งพาร์ทิชันบน Key ชนิด `HashPartitioner` จากนั้นได้รับ 3 พาร์ทิชันซึ่งเหมือนกับใน  `CoGroupedRDD` แป๊ะเลย ดังนั้นมันเลยเป็น `OneToOneDependency` นอกจากนั้นแล้วถ้า `RDD 2` ก็ถูกแบ่งโดนตัวแบ่งแบบเดียวกันคือ `HashPartitioner(3)` แล้วจะไม่เกิด `ShuffleDependency` ขึ้น ดังนั้นการ `join` ประเภทนี้สามารถเรียก `hashjoin()`
 
-**7) sortByKey(ascending, numPartitions)**
+**8) sortByKey(ascending, numPartitions)**
 
 ![sortByKey](../PNGfigures/sortByKey.png)
 
-`sortByKey()` sorts records of `RDD[(K, V)]` by key. `ascending` is a self-explanatory boolean flag. It produces a `ShuffledRDD` which takes a `rangePartitioner`. The partitioner decides the border of each partition, e.g. the first partition takes records with keys from `char A` to `char B`, and the second takes those from `char C` to `char D`. Inside each partition, records are sorted by key. Finally, the records in `MapPartitionsRDD` are in order.
+`sortByKey()` จะเรียงลำดับเรคอร์ดของ `RDD[(K, V)]` โดยใช้ค่า Key จากน้อยไปมาก `ascending` ถูกกำหนดใช้โดยตัวแปร Boolean เป็นจริง ถ้ามากไปน้อยเป็นเท็จ. ผลลัพธ์ขากขั้นนี้จะเป็น `ShuffledRDD` ซึ่งมีตัวแบ่งชนิด `rangePartitioner` ตัวแบ่งชนิดของพาร์ทิชันจะเป็นตัวกำหนดขอบเขตของแต่ละพาร์ทิชัน เช่น พาร์ทิชันแรกจะมีแค่เรคอร์ด Key เป็น `char A` to `char B` และพาร์ทิชันที่สองมีเฉพาะ `char C` ถึง `char D` ในแต่ละพาร์ทิชันเรคอร์ดจะเรียงลำดับตาม Key สุดท้ายแล้วจะได้เรคร์ดมาในรูปของ`MapPartitionsRDD` ตามลำดับ
 
-> `sortByKey()` use `Array` to store records of each partition, then sorts them.
+> `sortByKey()` ใช้ `Array` ในการเก็บเรคอร์ดของแต่ละพาร์ทิชันจากนั้นค่อยเรียงลำดับ 
 
-**8) cartesian(otherRDD)**
+**9) cartesian(otherRDD)**
 
 ![cartesian](../PNGfigures/Cartesian.png)
 
-`Cartesian()` returns a Cartesian product of 2 `RDD`s. The resulting `RDD` has `#partition(RDD a) x #partition(RDD b)` partitions.
+`Cartesian()` จะคืนค่าเป็นผลคูณคาร์ทีเซียนระหว่าง 2 `RDD` ผลลัพธ์ของ `RDD` จะมีพาร์ทิชันจำนวน = `จำนวนพาร์ทิชันของ (RDD a) x จำนวนพาร์ทิชันของ (RDD b)`
+ต้องให้ความสนใจกัยการขึ้นต่อกันด้วย แต่ละพาร์ทิชันใน `CartesianRDD` ขึ้นต่อกันกับ **ทั่วทั้ง** ของ 2 RDD พ่อแม่ พวกมันล้วนเป็น `NarrowDependency` ทั้งสิ้น
 
-Need to pay attention to the dependency, each partition in `CartesianRDD` depends 2 **entire** parent RDDs. They are all `NarrowDependency`.
+> `CartesianRDD.getDependencies()` จะคืน `rdds: Array(RDD a, RDD b)`. พาร์ทิชันตัวที่ i ของ `CartesianRDD` จะขึ้นกับ:
+-	`a.partitions(i / จำนวนพาร์ทิชันของA)`
+-	`b.partitions(i % จำนวนพาร์ทิชันของ B)`
 
-> `CartesianRDD.getDependencies()` returns `rdds: Array(RDD a, RDD b)`. The ith partition of `CartesianRDD` depends:
--	`a.partitions(i / #partitionA)`
--	`b.partitions(i % #partitionB)`
-
-**9) coalesce(numPartitions, shuffle = false)**
+**10) coalesce(numPartitions, shuffle = false)**
 
 ![Coalesce](../PNGfigures/Coalesce.png)
 
-`coalesce()` can reorganize partitions, e.g. decrease # of partitions from 5 to 3, or increase from 5 to 10. Need to notice that when `shuffle = false`, we can not increase partitions, because that will force a shuffle while we don't want shuffle, which is nonsense.
+`coalesce()` สามารถใช้ปรับปรุงการแบ่งพาร์ทิชัน อย่างเช่น ลดจำนวนของพาร์ทิชันจาก 5 เป็น 3 หรือเพิ่มจำนวนจาก 5 เป็น 10 แต่ต้อขอแจ้งให้ทราบว่าถ้า `shuffle = false` เราไม่สามารถที่จะเพิ่มจำนวนของพาร์ทิชันได้ เนื่องจากมันจะถูกบังคับให้ Shuffle ซึ่งเราไม่อยากให้มันเกิดขึ้นเพราะมันไม่มีความหมายอะไรเลย
 
-To understand `coalesce()`, we need to know **the relationship between `CoalescedRDD`'s partitions and its parent partitions**
+เพื่อทำความเข้าใจ `coalesce()` เราจำเป็นต้องรู้จักกับ **ความสัมพันธ์ระหว่างพาร์ทิชันของ `CoalescedRDD` กับพาร์ทิชันพ่อแม่**
 
 -	`coalesce(shuffle = false)`
-	As shuffle is disabled, what we need to do is just to group certain parent partitions. In fact, there are many factors to take into consideration, e.g. # records in partition, locality ,balance, etc. Spark has a rather complicated algorithm to do with that. (we will not talk about that for the moment). For example, `a.coalesce(3, shuffle = false)` is essentially a `NarrowDependency` of N:1.
+	ในกรณีที่ Shuffle ถูกปิดใช้งาน สิ่งที่เราต้องทำก็แค่จัดกลุ่มบางพาร์ทิชันของพ่อแม่ และในความเป็นจริงแล้วมันมีตัวแปรหลายตัวที่จะถูกนำมาพิจารณา เช่น จำนวนเรคอร์ดในพาร์ทิชัน, Locality และบาลานซ์ เป็นต้น ซึ่ง Spark ค่อนข้างจะมีขั้นตอนวิธีที่ซับซ้อนในการทำ (เดี๋ยวเราจะคุยกันถึงเรื่องนี้) ยกตัวอย่าง `a.coalesce(3, shuffle = false)` โดยทั่วไปแล้วจะเป็น `NarrowDependency` ของ N:1.
 
 - 	`coalesce(shuffle = true)`
-	When shuffle is enabled, `coalesce` simply divides all records of `RDD` in N parts, which can be done by the following trick (like round-robin algorithm):
-	-	for each partition, every record is assigned a key which is an increasing number.
-	-	hash(key) leads to a uniform records distribution on all different partitions.
+	ถ้าหากเปิดใช้งาน Shuffle ฟังก์ชัน `coalesce` จะแบ่งทุกๆเรคอร์ดของ `RDD` ออกจากกันแบบง่ายเป็น N ส่วนซึ่งสามารถใช้ทริกคล้ายๆกับ Round-robin ทำได้:
+	-	สำหรับแต่ละพาร์ทิชันทุกๆเรคอร์ดที่อยู่ในนั้นจะได้รับ Key ซึ่งจะเป็นเลขที่เพิ่มขึ้นในแต่ละเรคอร์ด (จำนวนที่นับเพิ่มเรื่อย)
+	-	hash(key) ทำให้เกิดรูปแบบเดียวกันคือกระจายตัวอยู่ทุกๆพาร์ทิชันอย่างสม่ำเสมอ
 
-	In the second example, every element in `RDD a` is combined with a increasing key (on the left side of the pair). The key of the first element in a partition is equal to `(new Random(index)).nextInt(numPartitions)`, where `index` is the index of the partition and `numPartitions` is the # of partitions in `CoalescedRDD`. The following keys increase by 1. After shuffle, the records in `ShffledRDD` are uniformly distributed. The relationship between `ShuffledRDD` and `CoalescedRDD` is defined a complicated algorithm. In the end, keys are removed (`MappedRDD`).
+	ในตัวอย่างที่สอง สมาชิกทุกๆตัวใน `RDD a` จะถูกรวมโดยค่า Key ที่เพิ่มขึ้นเรื่อยๆ ค่า Key ของสมาชิกตัวแรกในพาร์ทิชันคือ `(new Random(index)).nextInt(numPartitions)` เมื่อ `index` คืออินเด็กซ์ของพาร์ทิชันและ `numPartitions` คือจำนวนของพาร์ทิชันใน `CoalescedRDD` ค่าคีย์ต่อมาจะเพิ่มขึ้นทีละ 1 หลังจาก Shuffle แล้วเรคอร์ดใน `ShffledRDD` จะมีรูปแบบการจะจายเหมือนกัน ความสัมพันธ์ระหว่าง `ShuffledRDD` และ `CoalescedRDD` จะถูกกำหนดโดยความซับข้อนของขั้นตอนวิธี ในตอนสุดท้าย Key เหล่านั้นจะถูกลบ  (`MappedRDD`).
 
-**10) repartition(numPartitions)**
+**11) repartition(numPartitions)**
 
-equivalent to coalesce(numPartitions, shuffle = true)
+มีความหมายเท่ากับ `coalesce(numPartitions, shuffle = true)`
 
 ## Primitive transformation()
 **combineByKey()**
 
-**So far, we have seen a lot of logic plans. It's true that some of them are very similar. The reason lies in their implementation.**
+**ก่อนหน้านี้เราได้เห็น Logical plan ซึ่งบางตัวมีลักษณะคล้ายกันมาก เหตุผลก็คือขึ้นอยู่กับการนำไปใช้งานตามความเหมาะสมฃ**
 
-Knowing that the RDD on left side of `ShuffleDependency` should be `RDD[(K, V)]`, while, on the right side, all records with the same key are aggregated, then different operation will be applied on these aggregated records.
+อย่างที่เรารู้ RDD ที่อยู่ฝั่งซ้ายมือของ `ShuffleDependency` จะเป็น `RDD[(K, V)]`, ในขณะที่ทางฝั่งขวามือทุกเรคอร์ดที่มี Key เดียวกันจะถูกรวมเข้าด้วยกัน จากนั้นจะดำเนินการอย่างไรต่อก๋ิขึ้นอยู่กับว่าผู้ใช้สั่งอะไรโดยที่มันก็จะทำกับเรคอร์ดที่ถูกรวบรวมไว้แล้วนั่นแหละ
 
-In fact, many `transformation()`, like `groupByKey()`, `reduceBykey()`, executes `aggregate()` while doing logical computation. So **the similarity is that `aggregate()` and `compute()` are executed in the same time.** Spark uses `combineByKey()` to implement `aggregate() + compute()` operation.
+ในความเป็นจริงแล้ว `transformation()` หลายตัว เช่น `groupByKey()`, `reduceBykey()`, ยกเว้น `aggregate()` ขณะที่มีการคำนวณเชิงตรรกะ **ดูเหมือนกับว่า `aggregate()` และ `compute()` มันทำงานในเวลาเดียวกัน** Spark มี `combineByKey()` เพื่อใช้การดำเนินการ `aggregate() + compute()`
 
-Here is the definition of `combineByKey()`
+และนี่ก็คือกัคำนิยามของ `combineByKey()`
 ```scala
  def combineByKey[C](createCombiner: V => C,
       mergeValue: (C, V) => C,
@@ -269,25 +265,24 @@ Here is the definition of `combineByKey()`
       serializer: Serializer = null): RDD[(K, C)]
 ```
 
-There are three important parameters to talk about:
- -	`createCombiner`, which turns a V into a C (e.g., creates a one-element list)
- -	`mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
- -	`mergeCombiners`, to combine two C's into a single one.
+มี 3 พารามิเตอร์สำคัญที่เราต้องพูดถึงก็คือ:
+ -	`createCombiner`, ซึ่งจะเปลี่ยนจาก V ไปเป็น C (เช่น การสร้าง List ที่มีสมาชิกแค่ตัวเดียว)
+ -	`mergeValue`, เพื่อรวม V เข้าใน C (เช่น การเพิ่มข้อมูลเข้าไปที่ท้าย List)
+ -	`mergeCombiners`, เพื่อจะรวมรวม C เป็นค่าเดียว
 
-Details:
+รายละเอียด:
 
--	When some (K, V) pair records are being pushed to `combineByKey()`, `createCombiner` takes the first record to initialize a combiner of type `C` (e.g. C = V).
--	From then on, `mergeValue` takes every incoming record, `mergeValue(combiner, record.value)`, to update the combiner. Let's take `sum` as an example, `combiner = combiner + recoder.value`. In the end, all concerned records are merged into the combiner
--	If there is another set of records with the same key as the pairs above. `combineByKey()` will produce another `combiner'`. In the last step, the final result is equal to `mergeCombiners(combiner, combiner')`.
+-	เมื่อมีบางค่า Key/Value เป็นเรคอร์ด (K, V) ถูกสั่งให้ทำ `combineByKey()`, `createCombiner` จะเอาเรคอร์ดแรกออกมเพื่อเริ่มต้นตัวรวบรวม Combiner ชนิด `C` (เช่น C = V).
+-	จากนั้น, `mergeValue` จะทำงานกับทุกๆเรคอร์ดที่เข้ามา `mergeValue(combiner, record.value)` จำถูกทำงานเพื่ออัพเดท Combiner ดูตัวอย่างการ `sum` เพื่อให้เข้าใจขึ้น `combiner = combiner + recoder.value` สุดท้ายแล้วทุกเรคอร์ดจะถูกรวมเข้ากับ Combiner
+-	ถ้ามีเซ็ตของเรคอร์ดอื่นเข้ามาซึ่งมีค่า Key เดียวกับค่าที่กล่าวไปด้านบน  `combineByKey()` จะสร้าง `combiner'` ตัวอื่น ในขั้นตอนสุดท้ายจะได้ผลลัพธ์สุดท้ายที่มีค่าเท่ากับ `mergeCombiners(combiner, combiner')`.
 
-## Discussion
+## การพูดคุย
 
-So far, we have discussed how to produce job's logical plan as well as the complex dependency and computation behind spark
-
+ก่อนหน้านี้เราได้พูดคุยกันถึงการสร้าง Job ที่เป็น Logical plan และความซัลซ้อนของการขึ้นต่อกันละการคำนวณเบื้องหลัง Spark 
 `tranformation()` decides what kind of RDDs will be produced. Some `transformation()` are reused by other operations (e.g. `cogroup`)
 
-The dependency of a `RDD` depends on how `transformation()` produces corresponding RDD. e.g. `CoGroupdRDD` depends on all `RDD`s used for `cogroup()`
+การขึ้นต่อกันของ RDD จะขึ้นอยู่กับว่า `transformation()` เกิดขึ้นได้อย่างไรที่ให้ให้เกิด RDD เช่น `CoGroupdRDD` ขึ้นอยู่กับทุกๆ RDD ที่ใช้ใน `cogroup()`
 
-The relationship of `RDD` partitions are `NarrowDependency` and `ShuffleDependency`. The former is **full dependency** and the latter is **partial dependency**. `NarrowDependency` can be represented in many cases, a dependency is a `NarrowDependency` iff #partition and partitioner type are the same.
+ความสัมพันธ์ระหว่างพาร์ทิชันของ RDD กับ `NarrowDependency` ซึ่งเดิมทีนั้นเป็น **full dependency** ภายหลังเป็น  **partial dependency**. `NarrowDependency` สามารถแทนได้ด้วยหลายกรณี แต่การขึ้นต่อกันจะเป็นแบบ `NarrowDependency` ก็ต่อเมื่อจำนวนของพาร์ทิชันและตัวแบ่งพาร์ทิชันมีชนิดชนิดเดยวกัน ขนาดเท่ากัน
 
-In terms of data flow, `MapReduce` is equivalent to `map() + reduceByKey()`. Technically, the `reduce` of `MapReduce` would be more powerful than `reduceByKey()`. These details will be talked about in chapter **Shuffle details**.
+ถ้าพูดในแง่การไหลของข้อมูล `MapReduce` เทียบเท่ากัย `map() + reduceByKey()` ในทางเทคนิค, ตัว `reduce` ของ `MapReduce` จะมีประสิทธิภาพสูงกว่า  `reduceByKey()` ของเหล่านี้จะถูกพูดถึงในหัวข้อ **Shuffle details**.
