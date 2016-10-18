@@ -1,33 +1,32 @@
 # Physical Plan
 
-We have briefly introduced the DAG-like physical plan, which contains stages and tasks. In this chapter, we'll look at **how the physical plan (so the stages and tasks) is generated given a logical plan of a Spark application.**
+เราจะสรุปสั้นๆ ให้เข้าใจกลไกของระบบคล้าย DAG ใน Physical plan ซี่งรวมไปถึง Stage และ Task ด้วย ในบทความนี้เราจะคุยกันถึง **ทำอย่างไร Physical plan (Stage และ Task) จะถูกสร้างโดยให้ Logical plan ของแอพลิเคชันใน Spark**
 
-## A Complex Logical Plan
+## ความซับซ้อนของ Logical Plan
 
 ![ComplexJob](../PNGfigures/ComplexJob.png)
-The code of this application is attached at the end of this chapter.
+โค้ดของแอพพลิเคชันนี้จะแนบไว้ท้ายบท
 
-**How to properly define stages and determine the tasks with such a complex data dependency graph?**
+**ทำอย่างไรถึงจะกำหนด Stage และ Task ได้อย่างเหมาะสมเช่นความซับซ้อนของกราฟการขึ้นต่อกันของข้อมูล?**
+ไอเดียที่เข้าใจอย่างง่ายๆเกี่ยวกับความเกี่ยวข้องระหว่าง RDD หนึ่งกับอีก RDD หนึ่งที่เกิดขึ้นก่อนมันจะอยู่ในรูปแบบของ Stage ซึ่งเป็นการอธิบายโดยใช้ทิศทางหัวลูกศรในกราฟด้านบนก็จะกลายมาเป็น Task. ในกรณีที่ RDD 2 ตัวรวมเข้ามาเป็นตัวเดียวกันนั้น เราสามารถสร้าง Stage โดยใช้ 3 RDD วิธีนี้ใช้ได้ก็จริงแต่ไม่ค่อยมีประสิทธิภาพ มันบอบบางและอาจจะก่อให้เกิดปัญหา **Intermediate data จำนวนมากซึ่งต้องการที่เก็บ** สำหรับ Physical task แล้วผลลัพธ์ของตัวมันจะถูกเก็บทั้งใน Local Disk หรือในหน่วยความจำ หรือเก็บไว้ทั้งสองที่ สำหรับ Task ที่ถูกสร้างเพื่อลูกศรแต่ละตัวในกราฟการขึ้นต่อกันของข้อมูลระบบจะต้องเก็บข้อมูลของ RDD ทุกตัวไว้ ซึ่งทำให้สิ้นเปลืองทรัพยากรมาก
 
-An intuitive idea is to associate one RDD and its preceding RDD to form a stage, in this way each arrow in the above graph will become a task. For the case of 2 RDDs aggregates into one, we may create a stage with these 3 RDDs. This strategy could be a working solution, but will not be efficient. It has a subtle, but severe problem: **lots of intermediate data needs to be stored**. For a physical task, its result will be stored either on local disk, or in the memory, or both. If a task is generated for each arrow in the data dependency graph, the system needs to store data of all the RDDs. It will cost a lot.
-
-If we examine the logical plan more closely, we may find out that in each RDD, the partitions are independent from each other. That is to say, inside each RDD, the data within a partition will not interfere others. With this observation, an aggressive idea is to consider the whole diagram as a single stage and create one physical task for each partition of the final RDD (`FlatMappedValuesRDD`). The following diagram illustrates this idea:
+ถ้าเราสามารถตรวจสอบ Logical plan อย่างใกล้ชิดได้ เราก็จะพบว่าในแต่ละ RDD พาร์ทิชันของมันจะไม่ขึ้นต่อกันกับตัวอื่น สิ่งที่ต้องการจะบอกก็คือใน RDD แต่ละตัวข้อมูลที่อยู่ในพาร์ทิชันจะไม่ยุ่งเกี่ยวกันเลย จากข้อสังเกตนี้จึงรวบรวมแนวความคิดเกี่ยวกับการรวมทั้งแผนภาพเข้ามาเป็น Stage เดียวและให้ Physical task เพื่อทำงานแค่ตัวเดียวสำหรับแต่ละพาร์ทิชันใน RDD สุดท้าย (`FlatMappedValuesRDD`) แผนภาพข้างล่างนี้จำทำให้เห็นแนวความคิดนี้ได้มากขึ้น
 
 ![ComplexTask](../PNGfigures/ComplexTask.png)
 
-All thick arrows in above diagram belong to task1 whose result is the first partition of the final RDD of the job. Note that in order to compute the first partition of the `CoGroupedRDD`, we need to evaluate all partitions of its preceding RDDs since it's a `ShuffleDependency`. So in the computation of task1, we can also take the chance to compute the `CoGroupedRDD`'s second and third partition, for task2 and task3 respecively. As a result, the task2 and task3 are simpler. They are represented by thin arrows and dashed arrows in the diagram.
+ลูกศรเส้นหนาทั้งหมดที่อยู่ในแผนภาพจะเป็นของ Task1 ซึ่งมันจะสร้างให้ผลลัพธ์ของพาร์ทิชันแรกของ RDD ตัวสุดท้ายของ Job นั้น โปรดทราบว่าเพื่อที่จะคำนวณ `CoGroupedRDD` เราจะต้องรู้ค่าของพาร์ทิชันทุกตัวของ RDD ที่เกิดก่อนหน้ามันเนื่องจากมันเป็นลักษณะของ `ShuffleDependency` ดังนั้นการคำนวณที่เกิดขึ้นใน Task1 เรามีโอกาสที่จะคำนวณ `CoGroupedRDD` ในพาร์ทิชันที่สองและสามสำหรับ Task2 และ Task3 ตามลำดับ และผลลัพธ์จาก Task2 และ Task3 แทนด้วยลูกศรบเส้นบางและลูกศรเส้นประในแผนภาพ
 
-However, there's 2 problems with this idea:
-  - The first task is big. Because of the `ShuffleDependency`, we have to evaluate all the partitions of the preceding RDDs.
-  - Need to design clever algorithms to determine which are the partitions to cache.
+อย่างไรก็ดีแนวความคิดนี้มีปัญหาอยู่สองอย่างคือ:
+  - Task แรกจะมีขนาดใหญ่มากเพราะเกิดจาก `ShuffleDependency` เราจำเป็นต้องรู้ค่าของของทุกพาร์ทิชันของ RDD ที่เกิดก่อนหน้า
+  - ต้องใช้ขั้นตอนวิธีที่ฉลาดในการกำหนดว่าพาร์ทิชันไหนที่จะถูกแคช
+  
+แต่มีจุดหนึ่งที่เป็นข้อดีที่น่าสนใจของไอเดียนี้ก็คือ **Pipeline ของข้อมูลซึ่งข้อมูลจะถูกประมวลผลจริงก็ต่อเมื่อมันมีความจำเป็นที่จะใช้จริงๆ** ยกตัวอย่างใน Task แรก เราจะตรวจสอบย้อนกลัยจาก RDD ตัวสุดท้าย (`FlatMappedValuesRDD`) เพื่อดูว่า RDD ตัวไหนและพาร์ทิชันตัวไหนที่จำเป็นต้องรู้ค่าบ้าง แล้วถ้าระหว่าง RDD เป็นความสัมพันธ์แบบ `NarrowDependency` ตัว Intermeduate data ก็ไม่จำเป็นที่จะต้องถูกเก็บไว้
 
-But there's also one good point in this idea, that is to **pipeline the data: the data is computed when they are actually needed in a flow fashion**. For example in the first task, we check backwards from the final RDD (`FlatMappedValuesRDD`) to see which are the RDDs and partitions that are actually needed to be evaluated. And between the RDDs with `NarrowDependency` relation, no intermediate data needs to be stored.
-
-It will be clearer to understand the pipelining if we consider a record-level point of view. The following diagram illustrates different evaluation patterns for RDDs with `NarrowDependency`.
+Pipeline มันจะเข้าใจชัดเจนขี้นถ้าเราพิจารณาในมุมมองระดับเรคอร์ด แผนภาพต่อไปนี้จะนำเสนอรูปแบบการประเมินค่าสำหรับ RDD ที่เป็น `NarrowDependency`
 
 ![Dependency](../PNGfigures/pipeline.png)
 
-The first pattern (pipeline pattern) is equivalent to:
+รูปแบบแรก (Pipeline pattern) เทียบเท่ากับการทำงาน:
 
 ```scala
 for (record <- records) {
@@ -35,7 +34,7 @@ for (record <- records) {
 }
 ```
 
-Consider `records` as a stream, we can see that no intermediate result need to be stored.Once the computation `f(g(record))` is done, the result will be stored and the record line could be garbarge collected. But for other patterns, for example the third pattern, this is not the case:
+พิจารณาเรคอร์ดเป็น Stream เราจะเห็นว่าไม่มี Intermediate result ที่จำเป็นจะต้องเก็บไว้ มีแค่ครั้งเดียวหลังจากที่ `f(g(record))` ทำงานเสร็จแล้วผลลัพธ์ของการทำงานถึงจะถูกเก็บและเรคอร์ดสามารถถูก Gabage Collected เก็บกวาดให้ได้ แต่สำหรับบางรูปแบบ เช่นรูปแบบที่สามมันไม่เป็นเช่นนั้น:
 
 ```scala
 for (record <- records) {
@@ -49,51 +48,52 @@ for (record <- fResult) {
 }
 ```
 
-It's clear that `f`'s result need to be stored somewhere.
+ชัดเจนว่าผลลัพธ์ของฟังก์ชัน `f` จะถูกเก็บไว้ที่ไหนสักที่ก่อน
 
-
-Let's go back to our problem with stages and tasks. The main issue of our aggressive idea is that we can't actually pipelines then data flow if there's a `ShuffleDependency`. Then how about to cut the data flow at each `ShuffleDependency`? That leaves us with chains of RDDs connected by `NarrowDependency` and we know that `NarrowDependency` can be pipelined. So we can just divide the logical plan into stages like this:
+ทีนี้กลับไปดูปัญหาที่เราเจอเกี่ยวกับ Stage และ Task ปัญหาหลักที่พบในไอเดียนี้ก็คือเราไม่สามารถทำ Pipeline แล้วทำให้ข้อมูลไหลต่อได้จริงๆ ถ้ามันเป็น `ShuffleDependency` ดังนั้นเราจึงต้องหาวิะ๊ตัดการไหลข้อมูลที่แต่ละ `ShuffleDependency` ออกจากกัน ซึ่งจะทำให้ Chains หรือสายของ RDD มันหลุดออกจากกัน แล้วต่อกันด้วย `NarrowDependency` แทนเพราะเรารู้ว่า `NarrowDependency` สามารถทำ Pipeline ได้ พอคิดได้อย่างนี้เราก็เลยแยก Logical plan ออกเป็น Stage เหมือนในแผนภาพนี้
 
 ![ComplextStage](../PNGfigures/ComplexJobStage.png)
 
-The strategy for creating stages is to: **check backwards from the final RDD, add each `NarrowDependency` into the current stage and break out for a new stage when there's a `ShuffleDependency`. In each stage, the task number is determined by the partition number of the last RDD in the stage.**
+กลยุทธ์ที่ใช้ในการสร้าง Stage คือ **ตรวจสอบย้อนกลับโดยเริ่มจาก RDD ตัวสุดท้าย แล้วเพิ่ม `NarrowDependency` ใน Stage ปัจจุบันจากนั้นแยก `ShuffleDependency` ออกเป็น Stage ใหม่ ซึ่งในแต่ละ Stage จะมีจำนวน Task ที่กำหนดโดยจำนวนพาร์ทิชันของ RDD ตัวสุดท้าย ของ Stage **
 
-In above diagram, all thick arrows represent tasks. Since the stages are determined backwards, the last stage's id is 0, stage 1 and stage 2 are both parents of stage 0. **If a stage gives the final result, then its tasks are of type `ResultTask`, otherwise they are `ShuffleMapTask`.** `ShuffleMapTask` gets its name because its result needs to be shuffled before goes into the next stage, it's similar to the mappers in Hadoop MapReduce. `ResultTask` can be seen as reducer in Hadoop (if it gets shuffled data from its parent stage), or it could be mapper (if the stage has no parent).
+จากแผนภาพข้างบนเว้นหนาคือ Task และเนื่องจาก Stage จะถูกกำหนกย้อนกลับจาก RDD ตัวสุดท้าย Stage ตัวสุดท้ายเลยเป็น Stage 0 แล้วถึงมี Stage 1 และ Stage 2 ซึ่งเป็นพ่อแม่ของ Stage 0 ตามมา **ถ้า Stage ไหนให้ผลลัพธ์สุดท้ายออกมา Task ของมันจะมีชนิดเป็น `ResultTask` ในกรณีอื่นจะเป็น `ShuffleMapTask`** ชื่อของ `ShuffleMapTask` ได้มาจากการที่ผลลัพธ์ของมันจำถูกสับเปลี่ยนหรือ Shuffle ก่อนที่จะถูกส่งต่อไปทำงานที่ Stage ต่อไป ซึ่งลักษณะนี้เหมือนกับที่เกิดขึ้นในตัว Mapper ของ Hadoop MapReduce ส่วน  `ResultTask` สามารถมองเป็น Reducer ใน Hadoop ก็ได้ (ถ้ามันรับข้อมูลที่ถูกสับเปลี่ยนจาก Stage ก่อนหน้ามัน) หรืออาจจะดูเหมือน Mapper (ถ้า Stage นั้นไม่มีพ่อแม่)
 
-One problem remains: `NarrowDependency` chain can be pipelined, but in our example application, we've showed only `OneToOneDependency` and `RangeDependency`, how about other `NarrowDependency`?
+แต่ปัญหาอีกอย่างหนึ่งยังคงอยู่ : `NarrowDependency` Chain สามารถ Pipeline ได้ แต่ในตัวอย่างแอพพลิเคชันที่เรานำเสนอเราแสดงเฉพาะ `OneToOneDependency` และ `RangeDependency` แล้ว `NarrowDependency` แบบอื่นหล่ะ?
 
-Let's check back the cartesian operation in the last chapter with complex `NarrowDependency` inside:
+เดี๋ยวเรากลับไปดูการทำผลคูณคาร์ทีเซียนที่เคยคุยกันไปแล้วในบทที่แล้ว ซึ่ง `NarrowDependency` ข้างในมันค่อนข้างซับซ้อน:
 
 ![cartesian](../PNGfigures/Cartesian.png)
 
-With stages:
+โดยมี Stage อย่างนี้:
 
 ![cartesian](../PNGfigures/cartesianPipeline.png)
 
-The thick arrows represents the first `ResultTask`. Since the stage gives directly the final result, in above diagram we have 6 `ResultTask`. Different with `OneToOneDependency`, each `ResultTask` in this job needs to evaluate 3 RDDs and read 2 data blocks, all executed in one single task. **We can see that regardless of the actual type of `NarrowDependency`, be it 1:1 or N:N, `NarrowDependency` chain can always be pipelined. The number of task needed is the same as the partition number in the final RDD.**
+ลูกศรเส้นหนาแสดงถึง `ResultTask` เนื่องจาก Stage จะให้ผลลัพธ์สุดท้ายออกมาโดยตรงในแผนภาพด้านบนเรามี 6 `ResultTask` แต่มันแตกต่างกับ `OneToOneDependency` เพราะ `ResultTask` ในแต่ละ Job ต้องการรู้ค่า 3 RDD และอ่าน 2 บล๊อคข้อมูลการทำงานทุกอย่างที่ว่ามานี้ทำใน Task ตัวเดียว **จะเห็นว่าเราไม่สนใจเลยว่าจริงๆแล้ว `NarrowDependency` จะเป็นแบบ 1:1 หรือ N:N, `NarrowDependency` Chain สามารถเป็น Pipeline ได้เสมอ และจำนวนของ Task จะเท่ากับจำนวนพาร์ทิชันของ RDD ตัวสุดท้าย **
 
-## Execution of the Physical Plan
-We have stages and tasks, next problem: **how the tasks are executed for the final result?**
 
-Let's go back to the physical plan of our example application of the chapter. Recall that in Hadoop MapReduce, the tasks are executed in order, `map()` generates map outputs, which in term gets partitioned and written to local disk. Then `shuffle-sort-aggregate` process is applied to generate reduce inputs. Finally `reduce()` executes for the final result. This process is illustrated in the following diagram:
+## การประมวลผลของ Physical Plan
+
+เรามี Stage และ Task ปัญหาต่อไปคือ ** Task จะถูกประมวลผลสำหรับผลลัพธ์สุดท้ายอย่างไร?**
+
+กลับไปดูกันที่ Physical plan ของแอพพลิเคชันตัวอย่างในบทนี้แล้วนึกถึง Hadoop MapReduce ซึ่ง Task จะถูกประมวลผลตามลำดับ ฟังก์ชัน `map()` จะสร้างเอาท์พุทของฟังก์ชัน Map ซึ่งเป็นการรับพาร์ทิชันมาแล้วเขียนลงไปในดิสก์เก็บข้อมูล จากนั้นกระบวนการ `shuffle-sort-aggregate` จะถูกนำไปใช้เพื่อสร้างอินพุทให้กับฟังกืชัน Reduce จากนั้นฟังก์ชัน `reduce()` จะประมวลผลเพื่อให้ผลลัพธ์สุดท้ายออกมา กระบวนการเหล่านี้แสดงได้ตามแผนภาพด้านล่าง:
 
 ![MapReduce](../PNGfigures/MapReduce.png)
 
-This execution process can not be used directly on Spark's physical plan since Hadoop MapReduce's physical plan is simple and fixed, and without pipelining.
+กระบวนการประมวลผลนี้ไม่สามารถใช้กับ Physical plan ของ Spark ได้ตรงๆเพราะ Physical plan ของ Hadoop MapReduce นั้นมันเป็นกลไลง่ายๆและฟิกซ์ไว้โดยที่ไม่มีการ Pipeline ด้วย
 
-The main idea of pipelining is that **the data is computed when they are actually needed in a flow fashion.** We start from the final result (this is obviously where the computation is needed) and check backwards the RDD chain to find what are the RDDs and partitions that need to be evaluated for computing the final result. In most cases, we trace back to some partitions in the leftmost RDD and they are the first to be evaluated.
+ไอเดียหลักของการทำ Pipeline ก็คือ **ข้อมูลจะถูกประมวลผลจริงๆ ก็ต่อเมื่อมันต้องการจะใช้จริงๆในกระบวนการไหลของข้อมูล** เราจะเริ่มจากผลลัพธ์สุดท้าย (ดังนั้นชัดเจนว่าการคำนวณไหนบ้างที่ต้องการจริงๆ) จากนั้นตรวจสอบย้อนกลับตาม Chain ของ RDD เพื่อหาว่า RDD และพาร์ทิชันไหนที่เราต้องการรู้ค่าเพื่อใช้ในการคำนวณจนได้ผลลัพธ์สุดท้ายออกมา กรณีที่พบส่วนใหญ่เราจะตรวจสอบย้อนกลับไปจนถึงพาร์ทิชันบางตัวของ RDD ที่อยู่ฝั่งซ้ายมือสุดและพวกบางพาร์ทิชันที่อยู่ซ้ายมือสุดนั่นแหละที่เราต้องการที่จะปรู้ค่าเป็นอันดับแรก
 
-**For a stage without parent, its leftmost RDD can be evaluate directly (it has no dependency), and each record evaluated can be streamed into the subsequent computations (pipelining).** The computation chain is deduced backwards from the final step, but the actual execution streams the records forwards. One record goes through the whole computation chain before the computation of the next record starts.
+**สำหรับ Stage ที่ไม่มีพ่อแม่ ตัวมันจะเป็น RDD ที่อยู่ซ้ายสุดโดยตัวมันเองซึ่งเราสามารถรู้ค่าได้โดยตรงอยู่แล้ว (มันไม่มีการขึ้นต่อกัน) และแต่ละเรคอร์ดที่รู้ค่าแล้วสามารถ Stream ต่อไปยังกระบวนการคำนวณที่ตามมาภายหลังมัน (Pipelining)** Chain การคำนวณอนุมาณได้ว่ามาจากขั้นตอนสุดท้าย (เพราะไล่จาก RDD ตัวสุดท้ายมา RDD ฝั่งซ้ายมือสุด) แต่กลไกการประมวลผลจริง Stream ของเรคอร์ดนั้นดำเนินไปข้างหน้า (ทำจริงจากซ้ายไปขวา แต่ตอนเช็คไล่จากขวาไปซ้าย) เรคอร์ดหนึ่งๆจถูกทำทั้ง Chain การประมวลผลก่อนที่จะเริ่มประมวลผลเรคอร์ดตัวอื่นต่อไป
 
-For stages with parent, we need to execute its parent stages and fetch the data through shuffle. Once it's done, it becomes the same case as a stage without parent.
+สำหรับ Stage ที่มีพ่อแม่นั้นเราต้องประมวลผลที่ Stage พ่อแม่ของมันก่อนแล้วจึงดึงข้อมูลผ่านทาง Shuffle จากนั้นเมื่อพ่อแม่ประมวลผลเสร็จหนึ่งครั้งแล้วมันจะกลายเป็นกรณีที่เหมือนกัน Stage ที่ไม่มีพ่อแม่ 
 
-> In the code, each RDD's `getDependency()` method declares its data dependency. `compute()` method is in charge of receiving upstream records (from parent RDD or data source) and applying computation logic. We see often code like this in RDDs: `firstParent[T].iterator(split, context).map(f)`. `firstParent` is the first dependent RDD, `iterator()` shows that the records are consumed one by one, and `map(f)` applies the computation logic on each record. The `compute()` method returns an iterator for next computation.
+> ในโค้ดแต่ละ RDD จะมีเมธอต `getDependency()` ประกาศการขึ้นต่อกันของข้อมูลของมัน, `compute()` เป็นเมธอตที่ดูแลการรับเรคอร์ดมาจาก Upstream (จาก RDD พ่อแม่หรือแหล่งเก็บข้อมูล) และนำลอจิกไปใช้กับเรคอร์ดนั้นๆ เราจะเห็นบ่อยมากในโคดที่เกี่ยวกับ RDD (ผู้แปล: ตัวนี้เคยเจอในโค้ดของ Spark ในส่วนที่เกี่ยวกับ RDD) `firstParent[T].iterator(split, context).map(f)` ตัว `firstParent` บอกว่าเป็น RDD ตัวแรกที่ RDD มันขึ้นอยู่ด้วย, `iterator()` แสดงว่าเรคอร์ดจะถูกใช้แบบหนึ่งต่อหนึ่ง, และ `map(f)` เรคอร์ดแต่ละตัวจะถูกนำประมวลผลตามลอจิกการคำนวณที่ถูกกำหนดไว้. สุดท้ายแล้วเมธอต `compute()` ก็จะคืนค่าที่เป็น Iterator เพื่อใช้สำหรับการประมวลผลถัดไป
 
-Summary so far: **The whole computation chain is created by checking backwards the data depency from the last RDD. Each `ShuffleDependency` separates stages. In each stage, each RDD's `compute()` method calls `parentRDD.itererator()` to receive the upstream record stream.**
+สรุปย่อๆดังนี้ : **การคำนวณทั่วทั้ง Chain จะถูกสร้างโดยการตรวจสอบย้อนกลับจาก RDD 9ัวสุดท้าย แต่ละ `ShuffleDependency` จะเป็นตัวแยก Stage แต่ละส่วนออกจากกัน และในแต่ละ Stage นั้น RDD แต่ละตัวจะมีเมธอต `compute()` ที่จพเรียกการประมวลผลบน RDD พ่อแม่ `parentRDD.itererator()` แล้วรับ Stream เรคอร์ดจาก Upstream **
 
-Notice that `compute()` method is reserved only for computation logic that generates output records from parent RDDs. The actual dependent RDDs are declared in `getDependency()` method. The actual dependent partitions are declared in `dependency.getParents()` method.
+โปรดทราบว่าเมธอต `compute()` จะถูกจองไว้สำหรับการคำนวณลิจิกที่สร้างเอาท์พุทออกจากโดยใช้ RDD พ่อแม่ของมันเท่านั้น. RDD จริงๆของพ่อแม่ที่ RDD มันขึ้นต่อจะถูกประกาศในเมธอต `getDependency()` และพาร์ทิชันจริงๆที่มันขึ้นต่อจะถูกประกาศไว้ในเมธอต `dependency.getParents()`
 
-Let's check the `CartesianRDD` as an example:
+ลองดูผลคูณคาร์ทีเซียน `CartesianRDD` ในตัวอย่างนี้
 
 ```scala
  // RDD x is the cartesian product of RDD a and RDD b
@@ -135,11 +135,12 @@ Let's check the `CartesianRDD` as an example:
   )
 ```
 
-## Job Creation
+## การสร้าง Job
 
-Now we've introduced the logical plan and physical plan, then **how and when a job is created? What exactly is a job?**
+จนถึงตอนนี้เรามีความรู้เรื่อง Logical plan และ Plysical plan แล้ว **ทำอย่างไรและเหมื่อไหร่ที่ Job จะถูกสร้าง? และจริงๆแล้ว Job มันคืออะไรกันแน่**
 
-The following table shows the typical [action()](http://spark.apache.org/docs/latest/programming-guide.html#actions). The second column is `processPartition()` method, it defines how to process the records in each partition for the result. The third column is `resultHandler()` method, it defines how to process the partial results from each partition to form the final result.
+ตารางด้านล่างแล้วถึงประเภทของ [action()](http://spark.apache.org/docs/latest/programming-guide.html#actions) และคอลัมภ์ถัดมาคือเมธอต `processPartition()` มันใช้กำหนดว่าการประมวลผลกับเรคอร์ดในแต่ละพาร์ทิชันจะทำอย่างไรเพื่อให้ได้ผลลัพธ์ คอลัมภ์ที่สามคือเมธอต `resultHandler()` จะเป็นตัวกำหนดว่าจะประมวลผลกับผลลัพธ์บางส่วนที่ได้มาจากแต่ละพาร์ทิชันอย่างไรเพื่อให้ได้ผลลัพธ์สุดท้าย
+
 
 | Action | finalRDD(records) => result | compute(results) |
 |:---------| :-------|:-------|
@@ -154,51 +155,52 @@ The following table shows the typical [action()](http://spark.apache.org/docs/la
 | saveAsHadoopFile(path) | records => write(records) | null |
 | countByKey() | (K, V) => Map(K, count(K)) | (Map, Map) => Map(K, count(K)) |
 
-Each time there's an `action()` in user's driver program, a job will be created. For example `foreach()` action will call `sc.runJob(this, (iter: Iterator[T]) => iter.foreach(f)))` to submit a job to the `DAGScheduler`. If there's other `action()`s in the driver program, there will be other jobs submitted. So we'll have as many jobs as the `action()` operations in a driver program. This is why in Spark a driver program is called an application rather than a job.
+แต่ละครั้งที่มีการเรียก `action()` ในโปรแกรมไดรว์เวอร์ Job จะถูกสร้างขึ้น ยกตัวอย่าง เช่น `foreach()` การกระทำนี้จะเรียกใช้ `sc.runJob(this, (iter: Iterator[T]) => iter.foreach(f)))` เพื่อส่ง Job ไปยัง `DAGScheduler` และถ้ามีการเรียก `action()` อื่นๆอีกในโปรแกรมไดรว์เวอร์ระบบก็จะสร้า Job ใหม่และส่งเข้าไปใหม่อีกครั้ง ดังนั้นเราจึงจะมี Job ได้หลายตัวตาม `action()` ที่เราเรียกใช้ในโปรแกรมไดรว์เวอร์ นี่คือเหตุผลที่ว่าทำไมไดรว์เวอร์ของ Spark ถูกเรียกว่าแอพพลิเคชันมากกว่าเรียกว่า Job
 
-The last stage of a job generates the job's result. For example in the `GroupByTest` in the first chapter, there're 2 jobs with 2 sets of results. When a job is submitted, the `DAGScheduler` applies the strategy to figure out the stages, and submits firstly the **stages without parents** for execution. In this process, the number and type of tasks are also determined. A stage is executed after its parent stages' execution.
+Stage สุดท้ายของ Job จะสร้างผลลัพธ์ของแต่ละ Job ออกมา ยกตัวอย่างเช่นสำหรับ `GroupByTest` ที่เราเคยคุยกันในบทแรกนั้นจะเห็นว่ามั Job อยู่ 2 Job และมีผลลัพธ์อยู่ 2 เซ็ตผลลัพธ์ เมื่อ Job ถูกส่งเข้าสู่ `DAGScheduler` และนำไปวิเคราะห์ตามแผนการคิดในการแบ่ง Stage แล้วส่ง Stage อันดับแรกเข้าไปซึ่งเป็น **Stage ที่ไม่มีพ่อแม่** เพื่อประมวลผล ซึ่งในกระบวนการนี้จำนวน Task จะถูกกำหนดและ Stage จะถูกประมวลผลหลังจากที่ Stage พ่อแม่ของมันถูกประมวลผลเสร็จไปแล้ว
 
-## Details in Job Submission
 
-Let's briefly analyze the code for job creation and submission. We'll come back to this part in the Architecture chapter.
+## รายละเอียดของการส่ง Job
 
-1. `rdd.action()` calls `DAGScheduler.runJob(rdd, processPartition, resultHandler)` to create a job.
-2. `runJob()` gets the partition number and type of the final RDD by calling `rdd.getPartitions()`. Then it allocates `Array[Result](partitions.size)` for holding the results based on the partition number.
-3. Finally `runJob(rdd, cleanedFunc, partitions, allowLocal, resultHandler)` in `DAGScheduler` is called to submit the job. `cleanedFunc` is the closure-cleaned version of `processPartition`. In this way this function can be serialized and sent to the different worker nodes.
-4. `DAGScheduler`'s `runJob()` calls `submitJob(rdd, func, partitions, allowLocal, resultHandler)` to submit a job.
-5. `submitJob()` gets a `jobId`, then wrap the function once again and send a `JobSubmitted` message to `DAGSchedulerEventProcessActor`. Upon receiving this message, the actor calls `dagScheduler.handleJobSubmitted()` to handle the submitted job. This is an example of event-driven programming model.
-6. `handleJobSubmitted()` firstly calls `finalStage = newStage()` to create stages, then it `submitStage(finalStage)`. If `finalStage` has parents, the parent stages will be submitted first. In this case, `finalStage` is actually submitted by `submitWaitingStages()`.
+มาสรุปการวิเคราะห์ย่อๆสำหรับโค้ดที่ใช้ในการสร้าง Job และการส่ง Job เข้าไปทำงาน เราจะกลับมาคุยเรื่องนี้ในบทเรื่องสถาปัตยกรรม
 
-How `newStage()` divide an RDD chain in stages?
-- This method calls `getParentStages()` of the final RDD when instantiating a new stage (`new Stage(...)`)
-- `getParentStages()` starts from the final RDD, check backwards the logical plan. It adds the RDD into the current stage if it's a `NarrowDependency`. When it meets a `ShuffleDependency` between RDDs, it takes in the right-side RDD (the RDD after the shuffle) and then concludes the current stage. Then the same logic is applied on the left hand side RDD of the shuffle to form another stage.
-- Once a `ShuffleMapStage` is created, its last RDD will be registered `MapOutputTrackerMaster.registerShuffle(shuffleDep.shuffleId, rdd.partitions.size)`. This is important since the shuffle process needs to know the data output location from `MapOuputTrackerMaster`.
+1. `rdd.action()` เรียกใช้งาน `DAGScheduler.runJob(rdd, processPartition, resultHandler)` เพื่อสร้าง Job
+2. `runJob()` รับจำนวนพาร์ทิชันและประเภทของ RDD สุดท้ายโดยเรียกเมธอต `rdd.getPartitions()` จากนั้นจะจัดสรรให้ `Array[Result](partitions.size)` เอาไว้สำหรับเก็บผลลัพธ์ตามจำนวนของพาร์ทิชัน
+3. สุดท้ายแล้ว `runJob(rdd, cleanedFunc, partitions, allowLocal, resultHandler)` ใน `DAGScheduler` จะถูกเรียกเพื่อส่ง Job, `cleanedFunc` เป็นลักษณะ Closure-cleaned ของฟังก์ชัน `processPartition`. ในกรณีนี้ฟังก์ชันสามารถที่จะ Serialized ได้และสามารถส่งไปยังโหนด Worker ตัวอื่นได้ด้วย 
+4. `DAGScheduler` มีเมธอต `runJob()` ที่เรียกใช้ `submitJob(rdd, func, partitions, allowLocal, resultHandler)` เพื่อส่ง Job ไปทำการประมวลผล
+5. `submitJob()` รับค่า `jobId`, หลังจากนั้นจะห่อหรือ Warp ด้วยฟังก์ชันอีกทีหนึ่งแล้วถึงจะส่งข้อความ `JobSubmitted` ไปหา `DAGSchedulerEventProcessActor`. เมื่อ `DAGSchedulerEventProcessActor` ได้รับข้อความแล้ว Actor ก็จะเรียกใช้ `dagScheduler.handleJobSubmitted()` เพื่อจัดการกับ Job ที่ถูกส่งเข้ามาแล้ว นี่เป็นตัวอย่างของ Event-driven programming แบบหนึ่ง
+6. `handleJobSubmitted()` อันดับแรกเลยจะเรียก `finalStage = newStage()` เพื่อสร้าง Stage แล้วจากนั้นก็จะ `submitStage(finalStage)`. ถ้า `finalStage` มีพ่อแม่ ตัว Stage พ่อแม่จะต้องถูกประมวลผลก่อนเป็นอันดับแรกในกรณีนี้ `finalStage` นั้นจริงๆแล้วถูกส่งโดย `submitWaitingStages()`.
 
-Now let's see how `submitStage(stage)` submits stages and tasks:
+`newStage()` แบ่ง RDD Chain ใน Stage อย่างไร ?
+- เมธอต `newStage()` จำเรียกใช้ `getParentStages()` ของ RDD ตัวสุดท้ายเมื่อมีการสร้าง Stage ขึ้นมาใหม่ (`new Stage(...)`)
+- `getParentStages()` จะเริ่มไล่จาก RDD ตัวสุดท้ายจากนั้นตรวจสอบย้อนกลับโดยใช้ Logical plan และมันจะเพิ่ม RDD ลงใน Stage ปัจจุบันถ้าหาก Stage นั้นเป็น `NarrowDependency` จนกระทั่งมันเจอว่ามี `ShuffleDependency` ระหว่าง RDD มันจะให้ RDD ตัวมันเองอยู่ฝั่งทางขวา (RDD หลังจากกระบวนการ Shuffle) จากนั้นก็จบ Stage ปัจจุบัน ทำแบบนี้ไล่ไปเรื่อยๆโดยเริ่มจาก RDD ที่อยู่ทางซ้ายมือของ RDD ที่มีการ Shuffle เพื่อสร้าง Stage อื่นขึ้นมาใหม่ (ดูรูปการแบ่ง Stage vาจจะเข้าใจมากขึ้น)
+- ครั้งหนึ่งที่ `ShuffleMapStage` ถูกสร้างขึ้น RDD ตัวสุดท้ายของมันก็จะถูกลงทะเบียนหรือ Register `MapOutputTrackerMaster.registerShuffle(shuffleDep.shuffleId, rdd.partitions.size)`. นี่เป็นสิ่งที่สำคัญเนื่องจากว่ากระบวนการ Shuffle จำเป็นต้องรู้ว่าเอาท์พุทจาก `MapOuputTrackerMaster`
 
-1. `getMissingParentStages(stage)` is called to determine the `missingParentStages` of the current stage. If the parent stages are all executed, `missingParentStages` will be empty.
-2. If `missingParentStages` is not empty, then recursively submit these missing stages, and the current stage is inserted into `waitingStages`. Once the parent stages are done, stages inside `waitingStages` will be run.
-3. if `missingParentStages` is empty, then we know the stage can be executed right now. Then `submitMissingTasks(stage, jobId)` is called to generate and submit the actual tasks. If the stage is a `ShuffleMapStage`, then we'll allocate as many `ShuffleMapTask` as the partition number in the final RDD. In the case of `ResultStage`, `ResultTask` instances are allocated instead. The tasks in a stage form a `TaskSet`. Finally `taskScheduler.submitTasks(taskSet)` is called to submit the whole task set.
-4. The type of `taskScheduler` is `TaskSchedulerImpl`. In `submitTasks()`, each `taskSet` gets wrapped in a `manager` variable of type `TaskSetManager`, then we pass it to `schedulableBuilder.addTaskSetManager(manager)`. `schedulableBuilder` could be `FIFOSchedulableBuilder` or `FairSchedulableBuilder`, depending on the configuration. The last step of `submitTasks()` is to inform `backend.reviveOffers()` to run the task. The type of backend is `SchedulerBackend`. If the application is run on a cluster, its type will be `SparkDeploySchedulerBackend`.
-5. `SparkDeploySchedulerBackend` is a subclass of `CoarseGrainedSchedulerBackend`, `backend.reviveOffers()` actually sends `ReviveOffers` message to `DriverActor`. `SparkDeploySchedulerBackend` launches a `DriverActor` when it starts. Once `DriverActor` receives the `ReviveOffers` message, it will call `launchTasks(scheduler.resourceOffers(Seq(new WorkerOffer(executorId, executorHost(executorId), freeCores(executorId)))))` to launch the tasks. `scheduler.resourceOffers()` obtains the sorted `TaskSetManager` from the FIFO or Fair scheduler and gethers other information about the tasks from `TaskSchedulerImpl.resourceOffer()`. These information are stored in a `TaskDescription`. In this step the data locality information is also considered.
-6. `launchTasks()` in the `DriverActor` serialize each task. If the serialized size does not exceed the `akkaFrameSize` limit of Akka, then the task is finally sent to the executor for execution: `executorActor(task.executorId) ! LaunchTask(new SerializableBuffer(serializedTask))`.
+ตอนนี้มาดูว่า `submitStage(stage)` ส่ง Stage และ Task ได้อย่างไร:
 
-## Discussion
-Up till now, we've discussed:
-- how the driver program triggers jobs
-- how to generate a physical plan from a logical plan
-- what is pipelining in Spark and how it is implemented
-- the actual code of job creation and submission
+1. `getMissingParentStages(stage)` จะถูกเรียกเพื่อกำหนด `missingParentStages` ของ Stage ปัจจุบัน ถ้า Stage พ่อแม่ทุกตัวของมันถูกประมวลผลไปแล้วตัว `missingParentStages` จำมีค่าว่างเปล่า
+2. ถ้า `missingParentStages` ไม่ว่างเปล่าจะทำการวนส่ง Stage ที่หายไปเหล่านั้นซ้ำและ Stage ปะจุบันจะถูกแทรกเข้าไปใน `waitingStages` และเมื่อ Stage พ่อแม่ทำงานเรียบร้อยแล้ว Stage ที่อยู่ใน `waitingStages` จะถูกทำงาน
+3. ถ้า `missingParentStages` ว่างเปล่าและเรารู้ว่า Stage สามารถถูกประมวลผลในขณะนี้ แล้ว `submitMissingTasks(stage, jobId)` จำถูกเรียกให้สร้างและส่ง Task จริงๆ และถ้า Stage เป็น `ShuffleMapStage` แล้วเราจะจัดสรร `ShuffleMapTask` จำนวนมากเท่ากับจำนวนของพาร์ทิชันใน RDD ตัวสุดท้าย ในกรณีที่เป็น `ResultStage`, `ResultTask` จะถูกจัดสรรแทน. Task ใน Stage จะฟอร์ม `TaskSet` ขึ้นมา จากนั้นขั้นตอนสุดท้าย `taskScheduler.submitTasks(taskSet)` จำถูกเรียกและส่งเซ็ตของ Task ทั้งหมดไป
+4. ชนิดของ `taskScheduler` คือ `TaskSchedulerImpl`. ใน `submitTasks()` แต่ละ `taskSet` จะได้รับการ Wrap ในตัวแปร `manager` ซึ่งเป็นตัวแปรของชนิด `TaskSetManager` แล้วจึงส่งมันไปทำ `schedulableBuilder.addTaskSetManager(manager)`. `schedulableBuilder` สามารถเป็น `FIFOSchedulableBuilder` หรือ `FairSchedulableBuilder`, ขึ้นอยู่กับว่าการตั้งค่ากำหนดไว้ว่าอย่างไร จากนั้นขั้นตอนสุดท้ายของ `submitTasks()` คือแจ้ง `backend.reviveOffers()` เพื่อให้ Task ทำงาน. ชนิดของ Backend คือ `SchedulerBackend`. ถ้าแอพพลิเคชันทำงานอยู่บนคลัสเตอร์มันจะเป็น Backend แบบ `SparkDeploySchedulerBackend` แทน
+5. `SparkDeploySchedulerBackend` เป็น Sub-Class ของ `CoarseGrainedSchedulerBackend`, `backend.reviveOffers()` จริงๆจะส่งข้อความ `ReviveOffers` ไปหา `DriverActor`. `SparkDeploySchedulerBackend` จะเปิด `DriverActor` เมื่อเริ่มทำงาน. เมื่อ `DriverActor` ได้รับข้อความ `ReviveOffers` แล้วมันจะเรียก `launchTasks(scheduler.resourceOffers(Seq(new WorkerOffer(executorId, executorHost(executorId), freeCores(executorId)))))` เพื่อเปิดให้ Task ทำงาน จากนั้น `scheduler.resourceOffers()` ได้รับ `TaskSetManager` ที่เรียงลำดับแล้วจากตัวจัดการงาน FIFO หรือ Fair และจะรวบรวมข้อมูลอื่นๆที่เกี่ยวกับ Task จาก `TaskSchedulerImpl.resourceOffer()`. ซึ่งข้อมูลเหล่านั้นจัดเก็บอยู่ใน `TaskDescription` ในขั้นตอนนี้ตำแหน่งที่ตั้งของข้อมูล Data locality ก็จะถูกพิจารณาด้วย
+6. `launchTasks()` อยู่ใน `DriverActor` จะ Serialize แต่ละ Task ถ้าขนาดของ Serialize ไม่เกินลิมิตของ `akkaFrameSize` จานั้น Task จะถูกส่งครั้งสุดท้ายไปยัง  Executor เพื่อประมวลผล: `executorActor(task.executorId) ! LaunchTask(new SerializableBuffer(serializedTask))`.
 
-However, there's subjects that we've left for details:
-- the shuffle process
-- task execution and its execution location
+## การพูดคุย
+จนกระทั่งถึงตอนนี้เราคุยกันถึง:
+- โปรแกรมไดร์เวอร์ Trigger Job ได้อย่างไร?
+- จะสร้าง Physical plan จาก Logical plan ได้อย่างไร?
+- อะไรคือการ Pipelining ใน Spark และจำนำมันไปใช้ได้อย่างไร?
+- โค้ดจริงๆที่สร้าง Job และส่ง Job เข้าสู่ระบบ
 
-In the next chapter we'll discuss the shuffle process in Spark.
+อย่างไรก็ตามก็ยังมีหัวข้อที่ไม่ได้ลงรายละเอียดคือ:
+- กระบวนการ Shuffle
+- การประมวลผลของ Task และตำแหน่งที่มันถูกประมวลผล
 
-In my personal opinion, the transformation from logical plan to physical plan is really a masterpiece. The abstractions, such as dependencies, stages and tasks are all well defined and the logic of the algorithms are very clear.
+ในหัวข้อถัดไปเราจะถกเถียงกันถึงการะบวนการ Shuffle ใน Spark
 
-## Source Code of the Example Job
+ในความเห็นของผู้แต่งแล้วการแปลงจาก Logical plan ไปยัง Physical plan นั้นเป็นผลงานชิ้นเอกอย่างแท้จริง สิ่งที่เป็นนามธรร เช่น การขึ้นต่อกัน, Stage และ Task ทั้งหมดนี้ถูกกำหนดไว้อย่างดีสำหรับลอจิคของขั้นตอนวิธีก็ชัดเจนมาก
+
+## โค้ดจากตัวอย่างของ Job
 
 ```scala
 package internals
