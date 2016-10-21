@@ -1,60 +1,60 @@
-# Shuffle Process
+# กระบวนการ Shuffle
 
-Previously we've discussed Spark's physical plan and its execution details. But one thing is left untouched: **how data gets through a `ShuffleDependency` to the next stage?**
+ก่อนหน้านี้เราได้พูดคุยถึง Physical plan และการประมวลผลของ Spark ในรายละเอียดมาแล้วแต่มีอย่างหนึ่งที่เรายังไม่ได้แตะเลยก็คือ **ข้อมูลผ่าน `ShuffleDependency` เพื่อไป Stage อื่นได้อย่างไร**
 
-## Shuffle Comparison between Hadoop and Spark
-There're some differences and also similarities between the shuffle process in Hadoop and in Spark:
+## เปรียบเทียบ Shuffle ระหว่าง Hadoop and Spark
+มีทั้งข้อที่เหมือนกันและแตกต่างกันในกระบวนการ Shuffle ของซอฟต์แวร์ทั้งสองตัวนี้คือ Hadoop และ Spark
 
-**From a high-level point of view, they are similar.** They both partition the mapper's (or `ShuffleMapTask` in Spark) output and send each partition to its corresponding reducer (in Spark, it could be a `ShuffleMapTask` in the next stage, or a `ResultTask`). The reducer buffers the data in memory, shuffles and aggregates the data, and applies the `reduce()` logic once the data is aggregated.
+**จากมุมมองระดับสูงแล้วทั้งสองเหมือนกัน** ทั้งคู่มีการพาร์ทิชัน Mapper เอาท์พุท (หรือ `ShuffleMapTask` ใน Spark) และส่งแต่ละพาร์ทิชันที่ตรงตาม Reducer ของมันไปให้ (ใน Spark มันสามารถเป็น `ShuffleMapTask` ใน Stage ถัดไปหรือเป็น `ResultTask`) ตัว Reducer จะบัฟเฟอร์ข้อมูลไว้ในหน่วยความจำ, Shuffle และรวบรวมข้อมูล แล้วนำไปทำฟังก์ชัน `reduce()` ครั้งหนึ่งเมื่อข้อมูลถูกรวบรวมแล้ว
 
-**From a low-level point of view, there're quite a few differences.** The shuffle in Hadoop is sort-based since the records must be sorted before `combine()` and `reduce()`. The sort can be done by an external sort algorithm thus allowing `combine()` or `reduce()` to tackle very large datasets. Currently in Spark the default shuffle process is hash-based. Usually it uses a `HashMap` to aggregate the shuffle data and no sort is applied. If the data needs to be sorted, user has to call `sortByKey()` explicitly. In Spark 1.1, we can set the configuration `spark.shuffle.manager` to `sort` to enable sort-based shuffle. In Spark 1.2, the default shuffle process will be sort-based.
+**จากมุมมองระดับต่ำมีความแตกต่างกันค่อนข้างน้อย** การ Shuffle ใน Hadoop เป็นลักษณะเรียงตามลำดับหรือ Sort-based เนื่องจากเรคอร์ดมีความจำเป็นที่จะต้องถูกเรียงลำดับก่อนที่จะทำงานฟังก์ชัน `combine()` และ `reduce()` การเรียงลำดับสามารถทำได้โดยการใช้ขั้นตอนวิธีจากภายนอก กังนั้นจึงทำให้ `combine()` และ `reduce()` สามารถจัดการกับปัญหาที่มีเซ็ตข้อมูลขนาดใหญ่มากได้ ในขณะนี้ Spark กำหนดค่าเริ่มต้นของกระบวนการ Shuffle เป็นแบบใช้ค่า Hash หรือ Hash-based ซึ่งปกติก็จะใช้  `HashMap` ในการรวบรวมและ Shuffle ข้อมูลและจะไม่มีการเรียงลำดับ แต่ถ้าหากผู้ใช้จ้องการเรียงลำดับก็สามารถเรียกใช้ฟังก์ชัน `sortByKey()` เอาเองได้ ใน Spark 1.1 เราสามารถกำหนดการตั้งค่าได้ผ่าน `spark.shuffle.manager` แล้วตั้งค่าเป็น `sort` เพื่อเปิดใช้การเรียงตามลำดับในกระบวนการ Shuffle แต่ใน Spark 1.2 ค่าเริ่มต้นของกระบวนการ Shuffle กำหนดเป็น Sort-based
 
-**Implementation-wise, there're also differences.** As we know, there are obvious steps in a Hadoop workflow: `map()`, `spill`, `merge`, `shuffle`, `sort` and `reduce()`. Each step has a predefined responsibility and it fits the procedural programming model well. However in Spark, there're no such fixed steps, instead we have stages and a series of transformations. So operations like `spill`, `merge` and `aggregate` need to be somehow included in the transformations.
+**การนำไปใช้อย่างฉลาดมีความแตกต่างกัน** อย่างที่เรารู้กันว่ากลไกการทำงานแต่ละขึ้นตอนของ Hadoop นั้นชัดเจน เรามีการไหลของงาน: `map()`, `spill`, `merge`, `shuffle`, `sort` และ `reduce()` แต่ละขั้นตอนของการรับผิดชอบได้ถูกกำหนดไว้ล่วงหน้าแล้วและมันก็เหมาะสมกับการโปรแกรมแบบเป็นลำดับ อย่างไรก็ดีใน Spark มันไม่ได้มีการกำหนดกลไกที่ชัดเจนและคงที่ไว้ แทนที่จะทำแบบเดียวกับ Hadoop ตัว Spark มี Stage และซีรีย์ของการแปลงข้อมูล ดังนั้นการดำเนินการเช่น `spill`, `merge` และ `aggregate` จำเป็นที่จะต้องรวมอยู่ในกลไกการแปลง (Transformations)
 
-If we name the mapper side process of partitioning and persisting data "shuffle write", and the reducer side reading and aggregating data "shuffle read". Then the problem becomes: **How to integrate shuffle write and shuffle read logic in Spark's logical or physical plan? How to implement shuffle write and shuffle read efficiently?**
+ถ้าเราตั้งชื่อกระบวนการทางฝั่ง Mapper ของการพาร์ทิชันและเก็บข้อมูลว่า `Shuffle write` และฝั่ง Reducer ที่อ่านข้อมูลและรวบรวมข้อมูลว่า `Shuffle read` ปัญหาที่จะตามมาก็คือ **ทำอย่างไรเราถึงจะรวมลอจิกของ Shuffle write และ Shuffle read ใน Logical หรือ Physical ของ Spark? ทำอย่างไรถึงจะทำให้ Shuffle write และ Shuffle read มีประสิทธิภาพ**
 
 ## Shuffle Write
 
-Shuffle write is a relatively simple task if a sorted output is not required. It partitions and persists the data. The persistance of data here has two advantages: reducing heap pressure and enhancing fault-tolerance.
+Shuffle write เป็น Task ที่ค่อนข้างง่ายถ้าไม่ต้องเรียงเอาท์พุทตามลำดับก่อนมันจะแบ่งพาร์ทิชันข้อมูลแล้ว Persist ข้อมูลไว้ได้เลย การ Persist ข้อมูลมีข้อดีอยู่ 2 อย่างคือลดความดันของ Heap (ผู้แปล: ลดการที่ข้อมูลปริมาณมากถูกเก็บไว้ที่หน่วยความจำแบบ Heap) และส่งเสริมกะบวนการทนต่อความล้มเหลวหรือ Fault-tolerance
 
-Its implementation is simple: add the shuffle write logic at the end of `ShuffleMapStage` (in which there's a `ShuffleMapTask`). Each output record of the final RDD in this stage is partitioned and persisted, as shown in the following diagram:
+กระบวนกานำไปใช้ก็ง่ายมาก: เพิ่มลอจิกของ Shuffle write ไปที่ท้ายสุดของกระบวนการ `ShuffleMapStage` (ในกรณีที่เป็น `ShuffleMapTask`) แต่ละเอาท์พุทของเรคอร์ดใน RDD ตัวสุดท้ายในแต่ละ Stage จะแบ่งพาร์ทิชันและ Persist ข้อมูลดังที่แสดงในแผนภาพนี้
 
 ![shuffle-write-no-consolidation](../PNGfigures/shuffle-write-no-consolidation.png)
 
-In the diagram there're 4 `ShuffleMapTask`s to execute in the same worker node with 2 cores. The task result (records of the final RDD in the stage) is written on the local disk (data persistence). Each task has `R` buffers, `R` equals the number of reducers (the number if tasks in the next stage). The buffers are called buckets in Spark. By default the size of each bucket is 32KB (100KB before Spark 1.1) and is configurable by `spark.shuffle.file.buffer.kb` .
+จากแผนภาพจะพบว่ามี 4 `ShuffleMapTask` ที่จะถูกประมวลผลในเครื่อง Worker เครื่องเดียวซึ่งมี 2 Core ผลลัพธ์ของ Task (เรคอร์ดของ RDD ตัวสุดท้ายใน Stage) จะถูกเขียนลงดิสก์ (เราจะเรียกขั้นตอนนี้ว่า Persist ข้อมูล) แต่ละ Task จะมีบัฟฟเฟอร์ `R` ซึ่งจะมีขนาดเท่ากับจำนวนของ Reducer (จำนวนของ Task ที่จะอยู่ใน Stage ถัดไป) บัฟเฟอร์ใน Spark จะถูกเรียกว่า Bucket ขนาด 32KB (100KB ใน Spark 1.1) และสามารถตั้งค่าได้ผ่านตัวตัวตั้งค่า `spark.shuffle.file.buffer.kb`
 
-> In fact bucket is a general concept in Spark that represents the location of the partitioned output of a `ShuffleMapTask`. Here for simplicity a bucket is referred to an in-memory buffer.
+> ในความเป็นจริงแล้ว Bucket เป็นแนวคิดที่ Spark ใช้แสดงแทนตำแหน่งและพาร์ทิชันของเอาท์พุทของกระบวนการ `ShuffleMapTask` ในส่วนนี้มันง่ายมากถ้า Bucker จะอ้างถึงบัฟเฟอร์ในหน่วยความจำ
 
-`ShuffleMapTask` employs the pipelining techinque to compute the result records of the final RDD. Each record is sent to the bucket of its corresponding partition, which is determined by `partitioner.partition(record.getKey())`. The content of these buckets is written continuously to local disk files called `ShuffleBlockFile`, or `FileSegment` for short. Reducers will fetch their `FileSegment` in shuffle read phase.
+`ShuffleMapTask` ใช้กลไกของเทคนิคการ Pipeline เพื่อประมวลผลผลลัพธ์ของเรคอร์ดใน RDD ตัวสุดท้าย แต่ละเรคอร์ดจะถูกส่งไปยัง Bucket ที่รับผิดชอบพาร์ทิชันของมันโดยตรง ซึ่งสามารถกำหนดได้โดย `partitioner.partition(record.getKey())` เนื้อหาที่อยู่ใน Bucket จะถูกเขียนลงไฟล์บนดิสก์อย่างต่อเนื่องซึ่งไฟล์เหล่านี้จะเรียนว่า `ShuffleBlockFile` หรือย่อๆว่า `FileSegment` พวก Reducer จะดึงข้อมูลจาก `FileSegment` เหล่านี้ในช่วงของ Shuffle read
 
-An implementation like this is very simple, but has some issues:
+การนำไปใช้งานแบบที่กล่าวมานั้นง่ายมากแต่ก็พบปัญหาบางอย่างเช่น:
 
-1. **We may produce too many `FileSegment`.** Each `ShuffleMapTask` produces `R`(number of reducers) `FileSegment`, so `M` `ShuffleMapTask` will produce `M * R` files. For big datasets we could have big `M` and `R`, as a result there may be lots of intermediate data files.
-2. **Buffers could take a lot of space.** On a worker node, we could have `R * M` buckets for each core available to Spark. Spark will reuse the buffer space after a `ShuffleMapTask` but there could still be `R * cores` buckets in memory. On a node with 8 cores processing a 1000-reducer job, buckets will take up 256MB (`R * cores * 32KB`).
+1. **เราจำเป็นต้องสร้าง `FileSegment` ออกมามากมาย** แต่ละ `ShuffleMapTask` จะสร้าง `R` (จำนวนเท่ากับ Reducer) `FileSegment`, ดังนั้น `M` `ShuffleMapTask` จะให้ `M*R` ไฟล์ สำหรับเซ็ตข้อมูลขนาดใหญ่เราอาจจะได้ `M` และ `R` ขนาดใหญ่ด้วยทำให้ไฟล์ข้อมูลระหว่างทางหรือ Intermediate นั้นมีจำนวนมหาศาล
+2. **บัฟเฟอร์อาจจะใช้พื้นที่มหาศาล** บนโหนด Worker เราสามารถมี `M * R` Bucket สำหรับแต่ละ Core ที่ Spark สามารถใช้งานได้. Spark จะใช้พื้นที่ของบัฟเฟอร์เหล่านั้นซ้ำหลังจากการ `ShuffleMapTask` แต่ทว่ายังต้องคง `R * Core` Bucket ไว้ในหน่วยความจำ ถ้าโหนดมั CPU 8 Core กำลังประมวลผล 1000-reducer Job อยู่ Bucket จะใช้หน่วยความจำสูงถึง 256MB (`R * core * 32KB`)
 
-Currently, there's no good solution to the second problem. We need to write buffers anyway and if they're too small there will be impact on IO speed. For the first problem, we have a file consolidation solution already implemented in Spark. Let's check it out:
-
+ในปัจจุบันนี้เรายังไม่มีวิธีการที่เหมาะสมในการจัดการกับปัญหาที่สอง ซึ่งเราจำเป็นต้องเขียนบัฟเฟอร์อยู่และถ้ามันมีขนาดเล็กมากจะส่งผลกระทบกับความเร็วของ IO ของระบบ แต่สำหรับปัญหาแรกนั้นเราสามารถแก้ไขได้ด้วยการรวบรวมไฟล์ซึ่งถูกนำไปใช้ใน Spark แล้ว หากสนใจสามารถดูรายละเอียดได้ดังแผนภาพ
 ![shuffle-write-consolidation](../PNGfigures/shuffle-write-consolidation.png)
 
-It's clear that from the above diagram, consecutive `ShuffleMapTask`s running on the same core share a shuffle file. Each task appends its output data, `ShuffleBlock` i', after the output data of the previous task, `ShuffleBlock` i. A `ShuffleBlock` is called a `FileSegment`. In this way, reducers in the next stage can just fetch the whole file and we reduce the number of files needed in each worker node to `cores * R`. File consolidation feature can be activated by setting `spark.shuffle.consolidateFiles` to true.
+จากแผนภาพด้ายบนจะเห็นได้อย่างชัดเจนว่า `ShuffleMapTask` ที่ตามติดกันมาและทำงานอยู่บน Core เดียวกันสามารถใช้ไฟล์ Shuffle ร่วมกันได้ แต่ละ Task จะเขียนข้อมูลเอาท์พุทต่อจากเดิม `ShuffleBlock` i' จะต่อหลังจากเอาท์พุทของ Task ก่อนหน้าคือ `ShuffleBlock` i (ทีแรกเกิด i ตอนหลังเพิ่ม i' เข้ามาตรงส่วนท้าย) ตัว `ShuffleBlock` จะเรียกว่า `FileSegment` ในการทำแบบนี้ Reducer ใน Stage ถัดไปสามารถดึงไฟล์ทั้งไฟล์ได้แล้วทำให้เราสามารถลดจำนวนไฟล์ที่โหนด Worker ต้องการให้เหลือ `Core * R` ได้ การรวมไฟล์นี้ถูกกำหนดค่าด้วยการตั้งค่า `spark.shuffle.consolidateFiles` ให้มีค่าความจริงเป็น True
+
 
 ## Shuffle Read
-Let's check a physical plan of `reduceBykey`, which contains `ShuffleDependency`:
+เราจะเริ่มกันที่การตรวจสอบ Physical plan ของ `reduceBykey` ซึ่งมี `ShuffleDependency`:
 
 ![reduceByKey](../PNGfigures/reduceByKeyStage.png)
+อย่างที่สังหรณ์ใจเราจำเป็นที่จะต้องดึงข้อมูลของ `MapPartitionRDD` เพื่อที่จะสามารถรู้ค่าของ `ShuffleRDD` น้มาซึ่งปัญหา:
 
-Intuitively, we need to fetch the data of `MapPartitionRDD` to be able to evaluate `ShuffleRDD`. Then come the problems:
+- มันจะดึงเมื่อไหร่? จะดึงทุกครั้งที่มีการ `ShuffleMapTask` ดึงครั้งเดียวเมื่อ `ShuffleMapTask`  ทุกตัวเสร็จแล้ว?
+- การดึงและกระบวนการของเรคอร์ดเกิดขึ้นในเวลาเดียวกันหรือว่าดึงก่อนแล้วค่อยเข้ากระบวนการ?
+- ดึงมาแล้วจะเก็บไว้ที่ไหน?
+- ทำอย่างไร Task ที่อยู่ใน Stage ถัดไปถึงจะรู้ว่าตำแหน่งของข้อมูลที่ดึงมาอยู่ตรงไหน?
 
-- When to fetch? Fetch for each `ShuffleMapTask` or fetch only once after all `ShuffleMapTask`s are done?
-- Fetch and process the records at the same time or fetch and then process?
-- Where to store the fetched data?
-- How do the tasks of the next stage know the location of the fetched data?
 
-Solutions in Spark:
+ทางออกที่ Spark ใช้:
 
-- **When to fetch?** Wait after all `ShuffleMapTask`s end and then fetch. We know that a stage will be executed only after its parent stages are executed, so it's intuitive that the fetch operation begins after all `ShuffleMapTask`s in the previous stage are done. The fetched `FileSegments` have to be buffered in memory, so we can't fetch too much before the buffer content is written to disk. Spark limits this buffer size by `spark.reducer.maxMbInFlight`, here we name it `softBuffer`. It has default size 48MB. A `softBuffer` usually contains multiple fetched `FileSegments`. But sometimes one single segment can fill up the buffer.
+- **เมื่อไหร่ถึงจะดึงข้อมูล?** หลังจากที่ทุก `ShuffleMapTask` เสร็จแล้วถึงจะดึง อย่างที่เราทราบกันดีว่า Stage จะประมวลผลก็กต่อเมื่อ Stage พ่อแม่ของมันประมวลผลเสร็จแล้วเท่านั้น ดังนั้นมันจะเริ่มดึงข้อมูลก็ต่อเมื่อ `ShuffleMapTask` ใน Stage ก่อนหน้าทำงานเสร็จแล้ว ส่วน `FileSegment` ที่ดึงมาแล้วก้จะถูกบัฟเฟอร์ไว้หน่วยความจำ ดังนั้นเราจึงไม่สามารถดึงข้อมูลได้มากจนกว่าเนื้อหาในบัฟเฟอร์จะถูกเขียนลงบนดิสก์ Spark จะลิมิตขนาดของบัฟเฟอร์โดยใช้ `spark.reducer.maxMbInFlight` ซึ่งเราจะเรียกตัวนี้ว่า `softBuffer` ซึ่งขนาดของบัฟเฟอร์มีค่าเริ่มต้นเป็น 48MB และ `softBuffer` มักจะประกอบด้วยการดึงหลาย `FileSegment` แต่ในบางครั้งแค่ Segment เดียวก็เต็มบัฟเฟอร์แล้ว
 
-- **Fetch and process the records at the same time or fetch and then process?** Fetch and process the records at the same time. In MapReduce, the shuffle stage fetches the data and then applies `combine()` logic at the same time. However in MapReduce the reducer input data needs to be sorted, so the `reduce()` logic is applied after the shuffle-sort process. Since Spark does not require a sorted order for the reducer input data, we don't need to wait until all the data gets fetched to start processing. **Then how Spark implements this shuffle and processing?** In fact Spark utilizes data structures like HashMap to do the job. Each \<Key, Value\> pair from the shuffle process is inserted into a HashMap. If the `Key` is already present, then the pair is aggregated by `func(hashMap.get(Key), Value)`. In the above WordCount example, the `func` is `hashMap.get(Key) + Value`, and its result is updated in the HashMap. This `func` has a similar role to `reduce()` in Hadoop, but they differ in details. We illustrate the difference by the following code snippet:
+- **การดึงและกระบวนการของเรคอร์ดเกิดขึ้นในเวลาเดียวกันหรือว่าดึงก่อนแล้วค่อยเข้ากระบวนการ** การดึงและกระบวนการประมวลผลเรคอร์ดเกิดขึ้นในเวลาเดียวกัน ใน MapReduce ขั้นตอนที่ Stage เป็น Shuffle จะดึงข้อมูลและนำลอจิก `combine()` ไปทำกับเรคอร์ดในเวลาเดียวกัน อย่างไรก็ดีใน MapReduce ข้อมูลอินพุทของ Reducer นั้นต้องการเรียงตามลำดับดังนั้น `reduce()` จึงต้องทำงานหลังจากที่มีกระบวนการ Shuffle-sort แล้ว แต่่เนื่องจาก Soark ไม่ต้องการการเรียงตามลำดับก่อนถึงจะให้เป็นข้อมูลอินพุทของ Reducer จึงไม่จำเป็นต้องรอให้ได้รับข้อมูลทั้งหมดก่อนถึงจะเริ่มดำเนินการ **แล้วใน Spark เราใช้งาน Shuffle และกระบวนการได้อย่างไร** ในความเป็นจรงแล้ว Spark จะใช้ประโยชน์จากโครงสร้างข้อมูลเช่น HashMap เพื่อทำ Job นั้นๆ แต่ละคู่ \<Key, Value\> จากกระบวนการ Shuffle จะถูกแทรกเข้าไปใน HashMap ถ้า Key มีอยู่แล้วใน Collection จะเอา Value มารวมกัน โดยจะรวมกันผ่านการใช้ฟังก์ชัน `func(hashMap.get(Key), Value)` ในตัวอย่างโปรแกรม `WordCount` จากแผนภาพด้านบน `func` จะเป็น `hashMap.get(Key) + Value` และผลลัพธ์ของมันจะกลับไปอัพเดทใน HashMap ตัว `func` นี่เองที่ทำหน้าที่เหมือนกับ `reduce()` ใน Hadoop แต่พวกมันก็มีข้อแตกต่างกันในรายละเอียด ซึ่งจะแสดงในโค้ดดังนี้
 
 	```java
 	// MapReduce
@@ -71,56 +71,57 @@ Solutions in Spark:
 		return result
 	}
 	```
+	
+ใน Hadoop MapReduce เราสามารถกำหนดโครงสร้างข้อมูลใดๆตามที่เราต้องการได้ในฟังก์ชัน `process` ซึ่งมันเป็นแค่ฟังก์ชันที่รับ `Iterable` เป็นพารามิเตอร์ เราสามารถที่จะเลือกแคช `values` สำหรับใช้ประมวลผลต่อไปในอนาคตได้ และใน Spark มีเทคนิคคล้าย `foldLeft` ที่ถูกใช่กับ `func` เช่นใน Hadoop มันสามารถหาค่าเฉลี่ยได้ง่ายมากจากสมการ `sum(values) / values.length` แต่ไม่ใช่กับ Spark เราจะมาพูดถึงเรื่องนี้กันอีกครั้งภายหลัง
 
-In Hadoop MapReduce, we can define any data structure we like in `process` function. It's just a function that takes an `Iterable` as parameter. We can also choose to cache the `values` for further processing. In Spark, a `foldLeft` like technique is used to apply the `func`. For example, in Hadoop, it's very easy to compute the average out of `values`: `sum(values) / values.length`. But it's not the case in the Spark model. We'll come back to this part later.
+- **ดึงมาแล้วจะเก็บไว้ที่ไหน?** `FileSegment` ที่ดึงมาแล้วจะถูกบัฟเฟอร์ไว้ใน `softBuffer` หลังจากนั้นข้อมูลจะถูกประมวลผลและเขียนลงไปในตำแหน่งที่ได้กำหนดการตั้งค่าไว้แล้ว ถ้า `spark.shuffle.spill`  เป็น False แล้วตำแหน่งที่จะเขียนเก็บไว้จะอยู่ในหน่วยความจำเท่านั้น โครงสร้างข้อมูลแบบพิเศษคือ `AppendOnlyMap` จะถูกใช้เก็บข้อมูลของกระบวนการนี้เอาไว้ในหน่วยความจำ ไม่งั้นมันจะเขียนข้อมูลของกระบวนการลงทั้งในดิสก์และหน่วยความจำโดยใช้ `ExternalAppendOnlyMap` โครงสร้างข้อมูลนี้สามารถล้นออกไปเรียง Key/Value ตามลำดับบนดิสก์ได้ในกรณีที่หน่วยความจำมีที่ว่างไม่พอ **ปัญหาสำคัญคือเมื่อเราใช้ทั้งหน่วยความจำและดิสก์ทำอย่างไรเราถึงจะทำให้มันสมดุลกันได้** ใน Hadoop จะกำหนดค่าเริ่มต้น 70% ของหน่วยความจำจะถูกจองไว้สำหรับใช้กับข้อมูล Shuffle เมื่อ 66% ของพื้นที่หน่วยความจำส่วนนี้ถูกใช้ไปแล้ว Hadoop จะเริ่มกระบวนการ Merge-combine-spill ในส่วนของ Spark จะมีกลยุทธ์ที่คล้ายๆกันซึ่งเราก็จะคุยเรื่องนี่้ในบทถัดไป
+- **ทำอย่างไร Task ที่อยู่ใน Stage ถัดไปถึงจะรู้ว่าตำแหน่งของข้อมูลที่ดึงมาอยู่ตรงไหน?** นึกย้อนกลับไปถึงบทล่าสุดที่เราผ่านมาซึ่งมีขั้นตอนที่สำคัญมากคือ`ShuffleMapStage` ซึ่งจะลงทะเบียน RDD ตัวสุดท้ายโดยการเรียกใช้ `MapOutputTrackerMaster.registerShuffle(shuffleId, rdd.partitions.size)` ดังนั้นระหว่างกระบวนการ Shuffle นี้ Reducer จะได้รับตำแหน่งของข้อมูลโดนเรียกถาม `MapOutputTrackerMaster` ในโปรแกรมไดรว์เวอร์ และเมื่อ `ShuffleMapTask` ดำเนินการเรียบร้อยแล้วมันจะรายงานตำแหน่งของไฟล์ที่เป็น `FileSegment` ไปยัง `MapOutputTrackerMaster`
 
-- **Where to store the fetched data?** The fetched `FileSegment`s get buffered in `softBuffer`. Then the data is processed, and written to a configurable location. If `spark.shuffle.spill` is false, then the write location is only memory. A special data structure, `AppendOnlyMap`, is used to hold these processed data in memory. Otherwise, the processed data will be written to memory and disk, using `ExternalAppendOnlyMap`. This data structure can spill the sorted key-value pairs on disk when there isn't enough memory available. **A key problem in using both memory and disk is how to find a balance of the two.** In Hadoop, by default 70% of the memory is reserved for shuffle data. Once 66% of this part of the memory is used, Hadoop starts the merge-combine-spill process. In Spark a similar strategy is used. We'll talk about its details later in this chapter.
-
-- **How do the tasks of the next stage know the location of the fetched data?** Recall that in the last chapter, there's an important step: `ShuffleMapStage`, which will register its final RDD by calling `MapOutputTrackerMaster.registerShuffle(shuffleId, rdd.partitions.size)`. So during the shuffle process, reducers get the data location by querying `MapOutputTrackerMaster` in the driver process. When a `ShuffleMapTask` finishes, it will report the location of its `FileSegment` to `MapOutputTrackerMaster`.
-
-Now we have discussed the main ideas behind shuffle write and shuffle read as well as some implementation details. Let's dive into some interesting details.
+ตอนนี้เราจะมาถกเถียงกันในประเด็นหลักของไอเดียที่ซ่อนอยู่เบื้องหลังการทำงานของ Shuffle write และ Shuffle read รวมถึงการนำไปใช้งานในบางรายละเอียด
 
 ## Shuffle Read of Typical Transformations
 
 ### `reduceByKey(func)`
 
-We have briefly talked about the fetch and reduce process of `reduceByKey()`. Note that for an RDD, not all its data is present in the memory at a given time. The processing is always on a record basis. Processed record is rejected if possible. On a record level perspective, the `reduce()` logic can be shown as below:
+เราเคยคุยกันคร่าวๆแล้วเกี่ยวกับกระบวนการดึงและ Reduce ของ `reduceByKey()` แต่โปรดทราบว่าสำหรับ RDD ใดๆแล้วไม่จำเป็นว่าทั้งหมดของข้อมูลจะต้องอยู่บนหน่วยความจำในตอนที่เรากำหนดค่า การประมวลผลจะทำบนเรคอร์ดเป็นหลัก เรคอร์ดที่ประมวลผลเสร็จแล้วจะถูกปฏิเสธถ้าเป็นไปได้ ในมุมมองจากระดับของเรคอร์ด `reduce()` จะถูกแสดงไว้ดังแผนภาพด้านล่าง:
 
 ![shuffle-reduce](../PNGfigures/reduceByKeyRecord.png)
 
-We can see that the fetched records are aggregated using a HashMap, and once all the records are aggregated, we will have the result. The `func` needs to be commutative.
+เราจะเห็นว่าเรคอร์ดที่ถูกดึงมาได้รวมกันโดยใช้ HashMap และเมื่อทุกเรคอร์ดถูกรวมเข้าด้วยกันครั้งหนึ่งแล้วเราจะได้ผลลัพธ์ออกมา ตัว `func` ต้องการสับเปลี่ยน
 
-A `mapPartitionsWithContext` operation is used to transform the `ShuffledRDD` to a `MapPartitionsRDD`.
 
-To reduce network trafic between nodes, we could use map side `combine()` in Hadoop. It's also feasible in Spark. All we need is to apply the `mapPartitionsWithContext` in the `ShuffleMapStage`. For example in `reduceByKey` , the transformation of `ParallelCollectionRDD` to `MapPartitionsRDD` is equivalent to a map side combine.
+การดำเนินการ `mapPartitionsWithContext` ใช้สำหรับการแปลงจาก `ShuffleRDD` ไปเป็น `MapPartitionRDD`
 
-**Comparison between map()->reduce() in Hadoop and `reduceByKey` in Spark**
-- map side: there's no difference on the map side. For `combine()` logic, Hadoop imposes a sort before `combine()`. Spark applies the `combine()` logic by using a hash map.
-- reduce side: Shuffle process in Hadoop will fetch the data until a certain amount, then applies `combine()` logic, then merge sort the data to feed the `reduce()` function. In Spark fetch and reduce is done at the same time (in a hash map), so the reduce function needs to be commutative.
+เพื่อลดภาระของการจราขรบนเครือข่ายระหว่างโหนด เราสามารถใช้ `combine()` ในฝั่ง Map ได้ใน Hadoop ในส่วนของ Spark มันก็สะดวกสบายเช่นกัน ทั้งหมดที่เราต้องทำคือนำ `mapPartitionsWithContext` ไปใช้กับ `ShuffleMapStage` เช่น ใน `reduceByKey` การแปลงจาก `ParallelCollectionRDD` ไป `MapPartitionsRDD` มีค่าเทียบเท่ากับการ Combine ในฝั่ง Map
 
-**Comparison in terms of memory usage**
-- map side: Hadoop needs a big, circular buffer to hold and sort the `map()` output data. But `combine()` does not need extra space. Spark needs a hash map to do `combine()`. And persisting records to local disk needs buffers (buckets).
-- reduce side: Hadoop needs some memory space to store shuffled data. `combine()` and `reduce()` require no extra space since their input is sorted and can be grouped and then aggregated. In Spark, a `softBuffer` is needed for fetching. A hash map is used for storing the result of `combine()` and `reduce()`, if only memory is used in processing data. However, part of the data can be stored on disk if configured to use both memory and disk.
+**ข้อเปรียบเทียบระหว่าง map()->reduce() ใน Hadoop และ `reduceByKey` ใน Spark**
+- ฝั่ง Map : ในส่วนนี้จะไม่มีความแตกต่างกัน สำหรับลอจิก `combine()` Hadoop ต้องการเรียงตามลำดับก่อนที่จั `combine()`. Spark ใช้ `conbine()` ในรูปแบบของการใช้ Hash map
+- ฝั่ง Reduce : กระบวนการ Shuffle ใน Hadoop จะดึงข้อมูลจนกระทั่งถึงจำนวนหนึ่งจากนั้นจะทำ `combine()` แล้วจะรวมการเรียงลำดับของข้อมูลเพื่อป้อนให้ฟังก์ชัน `reduce()` ใน Spark การดึงข้อมูลและ Reduce เกิดขึ้นในเวลาเดียวกัน (ใน Hash map) ดังนั้นฟังก์ชัน Reduce จะต้องการการสับเปลี่ยน
+
+**ข้อเปรียบเทียบในแง่ของการใช้งานหน่วยความจำ**
+- ฝั่ง Map : Hadoop ต้องใช้บัฟเฟอร์แบบวงกลมเพื่อถือและเรียงลำดับของข้อมูลเอาท์พุทจาก `map()` แต่ส่วนของ `combine()` ไม่ต้องการพื้นที่หน่วยความจำเพิ่มเติม Spark ต้องการใช้ Hash map เพื่อทำ `combine()` และการเก็บข้อมูลเรอคอร์ดเหล่านั้นลงดิสก์ต้องการใช้บัฟเฟอร์ (Bucket)
+- ฝั่ง Reduce: Hadoop ต้องใช้เนื้อที่ของหน่วยความจำบางส่วนเพื่อนที่จะเก็บข้อมูลที่ Shuffle แล้วเอาไว้. `combine()` และ `reduce()` ไม่จำเป็นต้องใช้เนื้อที่ของหน่วยความจำเพิ่มเติมเนื่องจากอินพุทเหล่านี้ถูกเรียงตามลำดับไว้เรียบร้อยแล้วดังนั้นจึงสามารถจะจัดกลุ่มและรวบรวมได้เลย ใน Spark `softBuffer` จำเป็นกับการดึงข้อมูล และ Hash map ถูกใช้สำหรับเก็บข้อมูลผลลัพธ์ของการ `combine()` และ `reduce()` เอาไว้ถ้ามีแค่การใช้งานหน่วยความจำในกระบวนการประมวลผลข้อมูล อย่างไรก็ตามส่วนของข้อมูลสามารถเก็บบนดิสก์ได้ถ้ามีการตั้งค่าไว้เป็นแบบใช้งานทั้งหน่วยความจำและดิสก์
 
 ### `groupByKey(numPartitions)`
 
 ![ShuffleGroupByKey](../PNGfigures/ShuffleGroupByKey.png)
 
-The process is similar to that of `reduceByKey()`. The `func` becomes `result = result ++ result.value`. This means that each key's values are grouped together without further aggregation.
+กระบวนการที่คล้ายกันกับ `reduceByKey()` ตัว `func` จะเป็น `result = result ++ result.value` นั่นคือแต่ละ Key จะจัดกลุ่มของ Value รวมเอาไว้ด้วยกันโดยไม่มีการรวบรวมกันอีกภายหลัง
 
 ### `distinct(numPartitions)`
 
 ![ShuffleDistinct](../PNGfigures/ShuffleDistinct.png)
 
-Similar to `reduceByKey()`. The `func` is `result = result == null ? record.value : result`. This means that we check the existence of the record in the `HashMap`. If it exists, reject the record, otherwise insert it into the map. Like `reduceByKey()`, there's map side `combine()`.
+
+คล้ายกับการทำงานของ `reduceByKey()` ตัว `func` คือ `result = result == null ? record.value : result` นั่นหมายความว่าจะตรวจสอบดูเรคอร์ดใน `HashMap` ก่อนว่ามีหรือเปล่า ถ้ามีอยู่แล้วก็จะปฏิเสธเรคอร์ดนั้น ถ้ายังไม่มีอยู่ก็จะเพิ่มเข้าไปใน Map. ซึ่งฝั่งที่ทำการ Map จะทำงานเหมือนกับ `reduceByKey()` คือมีการ `combine()` ที่ฝั่ง Map นั่นเอง
 
 ### `cogroup(otherRDD, numPartitions)`
 
 ![ShuffleCoGroup](../PNGfigures/ShuffleCoGroup.png)
 
-There could be 0, 1 or multiple `ShuffleDependency` for a `CoGroupedRDD`. But in the shuffle process we don't create a hash map for each shuffle dependency, but one hash map for all of them. Different from `reduceByKey`, the hash map is constructed in RDD's `compute()` rather than in `mapPartitionsWithContext()`.
+สามารถเป็นได้ทั้ง 0, 1 หรือหลาย `ShuffleDependency` สำหรับส่วนของ `CoGroupedRDD` แต่ในกระบวนการ Shuffle เราไม้ได้สร้าง Hash map สำหรับ Shuffle dependency แต่ละตัวแต่จะใช่ Hash map แค่ตัวเดียวกับ Shuffle dependency ทุกตัว ซึ่งแตกต่างการ `reduceByKey` ที่ Hash map จำถูกสร้างในเมธอต `compute()` ของ RDD มากกว่า `mapPartitionWithContext()`
 
-A task of this RDD's execution will allocate an `Array[ArrayBuffer]`. This array contains the same number of empty `ArrayBuffer`s as the number of input RDDs. So in the example we have 2 `ArrayBuffers` in each task. When a key-value pair comes from RDD A, we add it to the first `ArrayBuffer`. If a key-value pair comes from RDD B, then it goes to the second `ArrayBuffer`. Finally a `mapValues()` operation transforms the values into the correct type: `(ArrayBuffer, ArrayBuffer)` => `(Iterable[V], Iterable[W])`.
+Task ของการประมวลผลของ RDD จะจัดสรรให้มี `Array[ArrayBuffer]` ซึ่ง Array ตัวนี้จะมีจำนวนของ `ArrayBuffer` ที่ว่างเปล่าเท่ากับจำนวนของ RDD อินพุท ยกตัวอย่างของแผนภาพด้านบนเรามี `ArrayBffer` อยู่ 2 ตัวในแต่ละ Task ซึ่งเท่ากับจำนวน RDD อินพุทที่เข้ามา เมื่อคู่ Key/Value มาจาก `RDD a` มันจะเพิ่มเข้าไปใน `ArrayBuffer` ตัวแรกถ้าคู่ Key/Value มาจาก `RDD b` มันจะเพิ่มเข้าไปใน `ArrayBuffer` ตัวที่สองจากนั้นจะเรียก `mapValues()` ให้ทำการแปลงจาก Values .ห้เป็นชนิดที่ถูกต้อง: `(ArrayBuffer, ArrayBuffer)` => `(Iterable[V], Iterable[W])`.
 
 ### `intersection(otherRDD)` and `join(otherRDD, numPartitions)`
 
@@ -128,58 +129,64 @@ A task of this RDD's execution will allocate an `Array[ArrayBuffer]`. This array
 
 ![join](../PNGfigures/ShuffleJoin.png)
 
-This two operations both use `cogroup`, so their shuffle process is identical to `cogroup`.
+การดำเนินการของสองตัวนี้ใช้ `cogroup` ดังนั้นแล้วกระบวนการ Shuffle มันก็จะเป็นแบบ `cogroup` ด้วย
 
 ### sortByKey(ascending, numPartition)
 
 ![sortByKey](../PNGfigures/ShuffleSortByKey.png)
 
+กระบวนการประมวลผลลิจิกของ `sortByKey()` แตกต่างกับ `reduceByKey()` เพียงเล็กน้อยคือตัวนี้มันไม่ได้ใช้ `HashMap` เพื่อจัดการกับเรคอร์ดข้อมูลที่ถูกดึงมา แต่ทุกคู่ Key/Value จะเป็นพาร์ทิชันแบบ Range partition เรคอร์ดที่อยู่ในพาร์ทิชันเดียวกันจะอยู่ในลักษณะเรียงลำดับตาม Key เรียบร้อยแล้ว
 The processing logic of `sortByKey()` is a little different from `reduceByKey()` as it does not use a `HashMap` to handle incoming fetched records. Instead, all key-value pairs are range partitioned. The records of the same partition is sorted by key.
 
 ### `coalesce(numPartitions, shuffle = true)`
 
 ![Coalesce](../PNGfigures/ShuffleCoalesce.png)
 
-`coalesce()` would create a `ShuffleDependency`, but it actually does not need to aggregate the fetched records, so no hash map is needed.
+`coalesce()` จะสร้าง `ShuffleDependency` ก็จริงแต่ว่ามันไม่ได้จำเป็นว่าเราจะต้องรวมเรคอร์ดที่ดึงมาไว้ด้วยกันดังนั้น Hash map ก็ไม่มีความจำเป็น
 
-## HashMap in Shuffle Read
+## HashMap ใน Shuffle Read
 
-So as we have seen, hash map is a frequently used data structure in Spark's shuffle process. Spark has 2 versions of specialized hash map: in memory `AppendOnlyMap` and memory-disk hybrid `ExternalAppendOnlyMap`. Let's look at some details of these two hash map implementations.
+ดังที่เราได้เห็นมาว่า Hash map เป็นโครงสร้างข้อมูลที่มีการใช้บ่อยในกระบวนการ Shuffle ของ Spark ซึ่งตัว Spark เองก็มี Hash map อยู่ 2 เวอร์ชั่นที่มีลักษณะเฉพาะ: `AppendOnlyMap` เป็น Hash map ที่อยู่ในหน่วยความจำ และอีกเวอร์ชันเป็นเวอร์ชันที่อยู่ได้ทั้งในหน่วยความจำและดิสก์คือ `ExternalAppendOnlyMap` เดี๋ยเราจะมาดูว่าทั้งสอง Hash map นี้มีความแตกต่างกันยังไง
 
 ### `AppendOnlyMap`
 
-The Spark documentation describes `AppendOnlyMap` as "A simple open hash table optimized for the append-only use case, where keys are never removed, but the value for each key may be changed". Its implementation is simple: allocate a big array of `Object`, as the following diagram shows. Keys are stored in the blue sections, and values are in the white sections.
+ในเอกสารของ Spark อธิบายว่า `AppendOnlyMap` เป็น "ตาราง Hash แบบเปิดง่ายๆที่ถูกปรับแต่งให้มีลักษณะเพิ่มเข้าไปได้เท่านั้น, Key ไม่สามารถถูกลบออกได้แต่ Value ของแต่ละ Key สามารถเปลี่ยนแปลงได้" วิธีการนำไปใช้ของมันก็ง่ายมาก: จัดสรร Array ของ `Object` ขนาดใหญ่ หากดูตามแผนภาพด้านล่างจะเห็นว่า Key จะถูกเก็บอยู่ในส่วนสีน้ำเงินและ Value จะถูกเก็บในส่วนสีขาว
 
 ![AppendOnlyMap](../PNGfigures/appendonlymap.png)
 
-When a `put(K, V)` is issued, we locate the slot in the array by `hash(K)`. **If the position is already occupied, then quadratic probing technique is used to find the next slot.**. For the example in the diagram, `K6`, a third probing has found an empty slot after `K4`, then the value is inserted after the key. When `get(K6)`, we use the same technique to find the slot, get `V6` from the next slot, compute a new value, then write it to the position of `V6`.
+เมื่อมีการ `put(K,V)` เกิดขึ้นเราจะหาช่องของ Array ได้โดย `hash(K)` **ถ้าตำแหน่งช่องที่ได้มามีข้อมูลอยู่แล้วจะใช้วิธี Quandratic probing เพื่อหาช่องวางไหม่** (ดูคำอธิบายในย่อหน้าถัดไป) ยกตัวอย่างในแผนภาพด้านบน `K6` การ Probing ครั้งที่สามจึงจะพบช่อองว่างซึ่งเป็นช่องที่หลังจาก `K4` จากนั้น Value จะถูกแทรกเพิ่มหลังจากที่ Key แทรกเข้าไปแล้ว เมื่อ `get(K6)` เราก็จะใช้เทคนิคเดียวกันนี้เข้าถึงแล้วดึง `V6` ซึ่งเป็น Value ในช่องถัดจาก Key ออกมาจากนั้นคำนวณค่า Value ใหม่แล้วก็เขียนกลับไปในตำแหน่งเดิมของ `V6`
 
-Iteration over the `AppendOnlyMap` is just a scan of the array.
+`(Quandratic probing เป็นวิธีการหาช่องว่างของตาราง Hash ในกรณีที่ไม่สามารถหาช่องว่างจาก hash(K) โดยตรงได้จะเอา hash(K) บวกเลขกำลังสองของจำนวนครั้งที่เกิดซ้ำ เช่น hash(K) + 1*1 ยังไม่ว่างก็ไปหา hash(K) + 2*2 ถ้ายังไม่ว่างอีก hash(K) + 3*3`
 
-If 70% of the allocated array is used, then it will grow twice as large. Keys will be rehashed and the positions re-organized.
+การวนซ้ำบน `AppendOnlyMap` จะเป็นแค่การแสกน Array
 
-There's a `destructiveSortedIterator(): Iterator[(K, V)]` method in `AppendOnlyMap`. It returns sorted key-value pairs. It's implemented like this: first compact all key-value pairs to the front of the array and make each key-value pair in a single slot. Then `Array.sort()` is called to sort the array. As its name indicates, this operation will destroy the structure.
+ถ้า 70% ของ Array ถูกจัดสรรให้ใช้ไปแล้วมันจะมีการขยายเพิ่มเป็น 2 เท่าทำให้ Key จะถูกคำนวณ Hash ใหม่และตำแหน่งก็จะเปลี่ยนแปลงไป
+
+`AppendOnlyMap` มีเมธอต `destructiveSortedIterator(): Iterator[(K, V)]` ซึ่งคืนค่าคู่ Key/Value ที่เรียงตามลำดับแล้ว ในขั้นตอนการทำงานของมันจะเริ่มจากการที่กระชับคู่ Key/Value ไปให้อยู่ในลักษณะ Array ที่ค่าคู่ Key/Value อยู่ในช่องเดียวกัน (แผนภาพด้านบนมันอยู่คนละช่อง) แล้วจากนั้นใช้ `Array.sort()` ซึ่งเป็นการเรียกให้เกิดการเรียงตามลำดับของข้อมูลใน Array แต่การดำเนินการนี้จะทำลายโครงสร้างของข้อมูล
 
 ### `ExternalAppendOnlyMap`
 
 ![AppendOnlyMap](../PNGfigures/ExternalAppendOnlyMap.png)
 
-Compared with `AppendOnlyMap`, the implementation of `ExternalAppendOnlyMap` is more sophisticated. Its concept is similar to the `shuffle-merge-combine-sort` process in Hadoop.
+หากจะเปรียบเทียบกับ `AppendOnlyMap` การนำ `ExternalAppendOnlyMap` ไปใช้ดูจะซับซ้อนกว่า เพราะมันมีแนวคิดคล้ายๆกับกระบวนการ `shuffle-merge-combine-sort` ใน Hadoop
 
-`ExternalAppendOnlyMap` holds an `AppendOnlyMap`. Incoming key-value pairs are inserted into the `AppendOnlyMap`. **When `AppendOnlyMap` is about to grow its size, we'll check the available memory space. If there's still enough space, the `AppendOnlyMap` doubles its size, otherwise all its key-value pairs are sorted and then spilled onto local disk (by using `destructiveSortedIterator()`).** In the diagram, there're 4 spills of this map. In each spill, a `spillMap` file will be generated and a new, empty `AppendOnlyMap` will be instantiated to receive incoming key-value pairs. In `ExternalAppendOnlyMap`, when a key-value pair is inserted, it gets aggregated only with the in memory part (the `AppendOnlyMap`). So it means when asked for the final result, a global merge-aggregate needs to be performed on all spilled maps and the in memory `AppendOnlyMap`.
+`ExternalAppendOnlyMap` จะใช้ `AppendOnlyMap` คู่ Key/Value ที่เข้ามาจะถูกเพิ่มเข้าไปใน `AppendOnlyMap` **เมื่อ `AppendOnlyMap` มีขนาดเกือบเท่าของตัวมันเราจะตรวจสอบว่ามีเนื้อที่ว่างบนหน่วยความจำเหลืออยู่ไหม? ถ้ายังเหลือ `AppendOnlyMap` ก็จะเพิ่มขนาดเป็นสองเท่า ถ้าไม่พอมันจะเอาคู่ Key/Value ทั้งหมดของตัวมันไปเรียงตามลำดับจากนั้นก็จะเอาไปเขียนบนดิสก์ โดยใช้ `destructiveSortedIterator()` ** ในแผนภาพจะเห็นว่า Map มีการล้นหรือ Spill อยู่ 4 ครั้งซึ่งแต่ละครั้งที่ Spill แต่ละครั้งก็จะมีไฟล์ของ `spillMap` เกิดขึ้นมาใหม่ทุกครั้งและตัว `AppendOnlyMap` จะถูกสร้างขึ้นมาเพื่อรอรับคู่ Key/Value. ใน `ExternalAppendOnlyMap` เมื่อคู่ Key/Value ถูกใส่เพิ่มเข้ามาแล้วมันจะเกิดการรวมกรเฉพาะส่วนที่อยู่บนหน่วยความจำ (`AppendOnlyMap`) ดังนั้นหมายความว่าถ้าเราอยากได้ผลลัพธ์สุดท้าย Global merge-aggregate จะถูกเรียกใช้บนทุกๆ Spill และ `AppendOnlyMap` ในหน่วยความจำ
 
-**Global merge-aggregate runs as follows.** Firstly the in memory part (`AppendOnlyMap`) is sorted to a `sortedMap`. Then `DestructiveSortedIterator` (for `sortedMap`) or `DiskMapIterator` (for on disk `spillMap`) will be used to read a part of the key-value pairs into a `StreamBuffer`. Then the `StreamBuffer` is inserted into a `mergeHeap`. In each `StreamBuffer`, all records have the same `hash(key)`. Suppose that in the example, we have `hash(K1) == hash(K2) == hash(K3) < hash(K4) < hash(K5)`. As a result, the first 3 records of the first spilled map are read into the same `StreamBuffer`. The merge is simple: get `StreamBuffer`s with the same key hash using a heap, then put them into an `ArrayBuffer[StreamBuffer]`(`mergedBuffers`) for merge. The first inserted `StreamBuffer` is called `minBuffer`, the key of its first key-value pair is `minKey`. One merge operation will aggregate all KV pairs with `minKey` in the `mergedBuffer` and then output the result. When a merge operation in `mergedBuffer` is over, remaining KV pairs will return to the `mergeHeap`, and empty `StreamBuffer` will be replaced by a new read from in-memory map or on-disk spill.
+**Global merge-aggregate ทำงานดังต่อไปนี้** เริ่มแรกส่วนที่อยู่ในหน่วยความจำ (`AppendOnlyMap`) จะถูกเรียงตามลำดับเป็น `sortedMap` จากนั้น `DestructiveSortedIterator` (สำหรับ `sortedMap`) หรือ `DiskMapIterator` (สำหรับ `spillMap` ที่อยู่บนดิสก์) จะถูกใช้เพื่ออ่านส่วนของคู่ Key/Value แต่ละส่วนเข้าสู่ `StreamBuffer` จากนั้น `StreamBuffer` จะเพิ่มเข้าไปใน `mergeHeap` ในแต่ละ `StreamBuffer` ทุกเรคอร์ดจะมี `hash(key)` เดียวกัน สมมติว่าในตัวอย่างเรามี `hash(K1) == hash(K2) == hash(K3) < hash(K4) < hash(K5)` เราจะเห็นว่ามี 3 เรคอร์ดแรกของ Map ที่ Spill แรกมี `hash(key)` เดียวกันจึงอ่านเข้าสู่ `StreamBuffer` ตัวเดียวกัน ขั้นตอนการรวมกันของมันกไม่ยาก: เอา `StreamBuffer` ที่มีค่า `hash(key)` จากนั้นก็เก็บเข้าใน `ArrayBuffer[StreamBuffer]` (`mergedBuffer`) สำหรับผลการรวม `StreamBuffer` ตัวแรกที่ถูกเพิ่มเข้าไปเรียกว่า `minBuffer` ซึ่ง Key ของมันจะเรียกว่า `minKey` การรวมหรือ Merge หนึ่งครั้งจะรวบรวมทุกๆคู่ Key/Value ที่มี Key เป็น `minKey` ใน `mergedBuffer` จากนั้นก็ให้ผลลัพธ์ออกมา เมื่อการดำเนินการ Merge ใน `mergedBuffer` เสร็จแล้วคู่ Key/Value ที่เหลืออยู่จะคืนค่ากลับไปยัง `mergeHeap` และทำ `StreamBuffer` ให้ว่าง จากนั้นจะอ่านเข้ามาแทนใหม่จากในหน่วยความจำหรือ Spill ที่อยู่บนดิสก์
 
-There're still 3 points needed to be discussed:
-  - Available memory check. Hadoop allocates 70% of the memory space of a reducer for shuffle-sort. Similarly, Spark has `spark.shuffle.memoryFraction * spark.shuffle.safetyFraction` (defaults to 0.3 * 0.8) for `ExternalAppendOnlyMap`. **It seems that Spark is more conservative. Moreover, this 24% of memory space is shared by all reducers in the same executor.** An executor holds a `ShuffleMemoryMap: HashMap[threadId, occupiedMemory]` to monitor memory usage of all `ExternalAppendOnlyMap`s in each reducer. Before an `AppendOnlyMap` grows, the total memory usage after the growth will be computed using the information in `ShuffleMemoryrMap`, to see if there's enough space. Also notice that the first 1000 records will not trigger the spill check.
+ยังมีอีก 3 ประเด็นที่จะต้องพูดคุยกัน:
 
-  - `AppendOnlyMap` size estimation. To know the size of an `AppendOnlyMap`, we can compute the size of every object referenced in the structure during each growth. But this takes too much time. Spark has an estimation algorithm with O(1) complexity. Its core concept is to see how the map size changes after the insertion and aggregation of a certain amount of records to estimate the structure size. Details are in `SizeTrackingAppendOnlyMap` and `SizeEstimator`.
+ - การตรวจสอบหน่วยความจำว่าว่างหรือเปล่านั้นใน Hadoop จะกำหนดไว้ที่ 70% ของหน่วยความจำของ Reducer สำหรับ Shuffle-sort และก็คล้ายๆกันกับใน Spark 0ะตั้งค่า `spark.shuffle.memoryFraction * spark.shuffle.safetyFraction` (ค่าเริ่มต้น 0.3 * 0.8) สำหรับ `ExternalAppendOnlyMap` **ซึ่งดูเหมือนว่า Spark สงวนหน่วยความจำเอาไว้ และยิ่งไปกว่านั้นคือ 24% ของหน่วยความจำจะถูกใช้งานร่วมกันในทุก Reducer ที่อยู่ใน Executor gดียวกัน** ตัว Executor เองก็มีการถือครอง `ShuffleMemoryMap: HashMap[threadId, occupiedMemory]` เอาไว้อยู่เพื่อตรวจสอบการใช้งานหน่วยความจำของ `ExternalAppendOnlyMap` ในแต่ละ Reducer ก่อนที่ `AppendOnlyMap` จะขยายขนาดขึ้นจะต้องตรวจสอบดูก่อนว่าขนาดหลังจากที่ขยายแล้วเป็นเท่าไหร่โดยใช้ข้อมูลจาก `ShuffleMemoryrMap` ซึ่งต้องมีที่ว่างมากพอถึงจะขยายได้ ดังนั้นโปรดทราบว่า 1000 เรเคอร์ดแรกมันจะไม่มีการกระตุ้นให้มีการตรวจสอบ Spill
 
-  - Spill process. Like the shuffle write, Spark creates a buffer when spilling records to disk. Its size is `spark.shuffle.file.buffer.kb`, defaulting to 32KB. Since the serializer also allocates buffers to do its job, there'll be problems when we try to spill lots of records at the same time. Spark limits the records number that can be spilled at the same time to `spark.shuffle.spill.batchSize`, with a default value of 10000.
+ - `AppendOnlyMap` เป็นขนาดโดยประมาณ เพราะถ้าหากเราต้องการทราบค่าที่แน่นอนของ `AppendOnlyMap` เราก็ต้องคำนวณหาขนาดในทุกๆตัวที่มีการอ้างถึงในขณะที่มีการขยายตัวไปด้วยแต่มันใช้เวลามาก Spark จึงเลือกใช้วิธีประมาณซึ่งความซับซ้อนของขั้นตอนวิธีเป็น O(1) ในความหลักของมันคืออยากรู้ว่าขนาดของ Map เปลี่ยนไปอย่างไรหลังจากการเพิ่มเข้าและรวบรวมกันของเรคอร์ดจำนวนหนึ่งเพื่อประมาณการขนาดของทั้งโครงสร้าง รายละเอียดอยู่ใน `SizeTrackingAppendOnlyMap` และ `SizeEstimator`
+ 
+ - กระบวนการ Spill จำเหมือนกับ Shuffle write คือ Spark จะสร้างบัฟเฟอร์เมื่อมีการ Spill เรเคอร์ดไปยังดิสก์ ขนาดของมันคือค่าที่ตั้งค่าใน `spark.shuffle.file.buffer.kb` โดยค่าเริ่มต้นคือ 32KB เนื่องจาก Serializer ก็ได้จัดสรรบัฟเฟอร์สำหรับทำ Job ไว้ด้วย ดังนั้นปัญหาก็จะเกิดขึ้นเมื่อเราลอง Spill เรคอร์ดจำนวนมากมหาศาลในเวลาเดียวกัน ทำให้ Spark จำกัดจำนวนเรคอร์ดที่สามารถ Spill ได้ในเวลาเดียวกันนี้ในตัวตั้งค่า `spark.shuffle.spill.batchSize` ซึ่งขนาดเริ่มต้นเป็น 10000 ตัว
 
-## Discussion
-As we've seen in this chapter, Spark is way more flexible in the shuffle process compared to Hadoop's fixed shuffle-combine-merge-reduce model. It's possible in Spark to combine different shuffle strategies with different data structures to design an appropriate shuffle process based on the semantic of the actual transformation.
+## การพูดคุย
+อย่างที่เราเห็นในบทนี้คือ Spark มีแนวทางจัดการปัญหาที่ยืดหยุ่นมากในกระบวนการ Shuffle เมื่อเทียบกับที่ Hadoop ใช้คือการ Fix ลงไปว่าต้อง shuffle-combine-merge-reduce ใน Spark เป็นไปได้ที่จะผสมผสานกันระหว่างกลยุทธ์ทีหลากหลายในกระบวนการ Shuffle โดยใช้โครงสร้างข้อมูลที่แตกต่างกันไปเพื่อที่จะให้กระบวนการ Shuffle ที่เหมาะสมบนพื้นฐานของการการแปลงข้อมูล
+
+ดังนั้นเราจึงได้มีการพูดคุยกันถึงกระบวนการ Shuffle ใน Spark ที่ปราศจากการเรียงลำดับพร้อมกับทำอย่างไรกระบวนการนึ้ถึงจะควบรวมกับ Chain การประมวลผลของ RDD จริงๆ อีกทั้งเราคุยกันถึงเรื่องเกี่ยวกับปัญหาของหน่วยความจำและดิสก์ รวมถึงเปรียบเทียบในบางแง่มุมกับ Hadoop ในบทถัดไปเราจะอธิบายถึงกระบวนการการที่ Job ถูกประมวลผลจากแง่มุมของการสื่อสารกันระหว่างโปรเซส Inter-process communication. ปัญหาของตำแหน่งข้อมูลก็ได้กล่าวถึงในบทนี้ด้วยเช่นกัน
 
 So far we've discussed the shuffle process in Spark without sorting as well as how this process gets integrated into the actual execution of the RDD chain. We've also talked about memory and disk issues and compared some details with Hadoop. In the next chapter we'll try to describe job execution from an inter-process communication perspective. The shuffle data location problem will also be mentioned.
 
-Plus to this chapter, thers's the outstanding blog (in Chinese) by Jerry Shao, [Deep Dive into Spark's shuffle implementation](http://jerryshao.me/architecture/2014/01/04/spark-shuffle-detail-investigation/).
+เพิ่มเติมในบทนี้คือมีบล๊อคที่น่าสนใจมากๆ (เขียนในภาษาจีน) โดย Jerry Shao, [Deep Dive into Spark's shuffle implementation](http://jerryshao.me/architecture/2014/01/04/spark-shuffle-detail-investigation/).
