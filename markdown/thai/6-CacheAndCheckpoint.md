@@ -1,35 +1,35 @@
-# cache and checkpoint
+# cache และ checkpoint
 
-`cache` (or `persist`) is an important feature which does not exist in Hadoop. It makes Spark much faster to reuse a data set, e.g. iterative algorithm in machine learning, interactive data exploration, etc. Different from Hadoop MapReduce jobs, Spark's logical/physical plan can be very large, so the computing chain could be too long that it takes lots of time to compute RDD. If, unfortunately, some errors or exceptions occur during the execution of a task, the whole computing chain needs to be re-executed, which is considerably expensive. Therefore, we need to `checkpoint` some time-consuming RDDs. Thus, even if the following RDD goes wrong, it can continue with the data retrieved from checkpointed RDDs.
+`cache` (หรือ `persist`) เป็นฟีเจอร์ที่สำคัญของ Spark ซึ่งไม่มีใน Hadoop ฟีเจอร์นี้ทำให้ Spark มีความเร็วมากกว่าเพราะสามารถใช้เช็ตข้อมูลเดินซ้ำได เช่น Iterative algorithm ใน Machine Learning, การเรียกดูข้อมูลแบบมีปฏิสัมพันธ์ เป็นต้น ซึ่งแตกต่างกับ Hadoop MapReduce Job เนื่องจาก Sark มี Logical/Physical pan ที่สามารถขยายงานออกกว้างดังนั้น Chain ของการคำนวณจึงจึงยาวมากและใช้เวลาในการประมวลผล RDD นานมาก และหากเกิดข้อผิดพลาดในขณะที่ Task กำลังประมวลผลอยู่นั้นการประมวลผลทั้ง Chain ก็จะต้องเริ่มใหม่ ซึ่งส่วนนี้ถูกพิจารณาว่ามีข้อเสีย ดังนั้นจึงมี `checkpoint` กับ RDD เพื่อที่จะสามารถประมวลผลเริ่มต้นจาก `checkpoint` ได้โดยที่ไม่ต้องเริ่มประมวลผลทั้ง Chain ใหม่
 
 ## cache()
 
-Let's take the `GroupByTest` in chapter Overview as an example, the `FlatMappedRDD` has been cached, so job 1 can just start with `FlatMappedRDD`, since `cache()` makes the repeated data get shared by jobs of the same application.
+ลองกลับไปดูการทำ `GroupByTest` ในบทที่เป็นภาพรวม เราจะเห็นว่า `FlatMappedRDD` จะถูกแคชไว้ดังนั้น Job 1 (Job ถัดมา) สามารถเริ่มได้ที่ `FlatMappedRDD` นี้ได้เลย เนื่องจาก `cache()` ทำให้สามารถแบ่งปันข้อมูลกันใช้ระหว่าง Job ในแอพพลิเคชันเดียวกัน
 
 Logical plan：
 ![deploy](../PNGfigures/JobRDD.png)
 Physical plan：
 ![deploy](../PNGfigures/PhysicalView.png)
 
-**Q: What kind of RDD needs to be cached ?**
+**Q: RDD ประเภทไหนที่เราต้องแคชเอาไว้ ?**
 
-Those which will be repeatedly computed and are not too large.
+พวก RDD ที่มีการประมวลผลซ้ำๆ และก็ไม่ใหญ่มาก
 
-**Q: How to cache an RDD ?**
+**Q: จะแคช RDD ได้อย่างไร ?**
 
-Just do a `rdd.cache()` in driver program, where `rdd` is the RDD accessible to users, e.g. RDD produced by `transformation()`, but some RDD produced by Spark (not user) during the execution of a transformation can not be cached by user, e.g. `ShuffledRDD`, `MapPartitionsRDD` during `reduceByKey()`, etc.
+แค่สั่ง `rdd.cache()` ในโปรแกรมไดรว์เวอร์ เมื่อ `rdd` ที่เข้าถึงได้จากผู้ใช้งานแล้ว เช่น RDD ที่ถูกสร้างโดย `transformation()` จะสามารถแคชจากผู้ใช้ได้ แต่บาง RDD ที่สร้างโดย Spark ผู้ใช้ไม่มาสารถเข้าถึงได้จึงไม่สามารถแคชโดยผู้ใช้ได้ เช่น `ShuffledRDD`, `MapPartitionsRDD` ขณะที่ทำงาน `reduceByKey()` เป็นต้น
 
-**Q: How does Spark cache RDD ?**
+**Q: Spark แคช RDD ได้อย่างไร ?**
 
-We can just make a guess. Intuitively, when a task gets the first record of an RDD, it will test if this RDD should be cached. If so, the first record and all the following records will be sent to `blockManager`'s `memoryStore`. If `memoryStore` can not hold all the records, `diskStore` will be used instead.
+เราสามารถลองเดาดูอย่างที่เราสังหรณ์ใจว่าเมื่อ Task ได้รับเรคอร์ดแรกของ RDD แล้วมันจะทดสอบว่า RDD สามารถแคชไว้ได้หรือเปล่า ถ้าสามารถทำได้เรคอร์ดและเรคอร์ดที่ตามมาจะถูกส่งไปยัง `memoryStore` ของ `blockManager` และถ้า `memoryStore` ไม่สามารถเก็บทุกเรคอร์ดไว้นหน่วยความจำได้ `diskStore` จะถูกใช้แทน
 
-**The implementation is similar to what we can guess, but the difference is that** Spark will test whether the RDD should be cached or not just before computing the first partition. If the RDD should be cached, the partition will be computed and cached into memory. `cache` only uses memory. Writing to disk is called `checkpoint`.
+**การนำไปใช้นั้นคล้ายกับสิ่งเท่าเราเดาไว้ แต่มีบางส่วนที่แตกต่าง** Spark จะทดสอบว่า RDD สามารถแคชได้หรือเปล่าแค่ก่อนที่จะทำการประมวลผลพาร์ทิชันแรก และถ้า RDD สามารถแคชได้ พาร์ทิชันจะถูกประมวลผลแล้วแคชไว้ในหน่วยความจำ ซึ่ง `cache` ใช้หน่วยความจำเท่านั้น หากต้องการจะเขียนลงดิสก์จะเรียกใช้ `checkpoint`
 
-After calling `rdd.cache()`, `rdd` becomes `persistRDD` whose `storageLevel` is `MEMORY_ONLY`. `persistRDD` will tell `driver` that it needs to be persisted.
+หลังจากที่เรียกใช้งาน `rdd.cache()` แล้ว `rdd` จะกลายเป็น `persistRDD` ซึ่งมี `storageLevel` เป็น `MEMORY_ONLY` ตัว `persistRDD` จะบอก `driver` ว่ามันต้องการที่จะ Persist
 
 ![cache](../PNGfigures/cache.png)
 
-The above can be found in the following source code
+แผนภาพด้านดนสามารถแสดงได้ในโค้ดนี้:
 ```scala
 rdd.iterator()
 => SparkEnv.get.cacheManager.getOrCompute(thisRDD, split, context, storageLevel)
@@ -43,64 +43,64 @@ rdd.iterator()
 => updatedBlocks = blockManager.put(key, elements, tellMaster = true)
 ```
 
-When `rdd.iterator()` is called to compute some partitions in the `rdd`, a `blockId` will be used to indicate which partition to cache, where `blockId` is of `RDDBlockId` type which is different from other data types in `memoryStore` like `result` of `task`. And then, partitions in `blockManger` will be checked to see whether they are checkpointed. If so, it will say that the task has already been executed, no more computation is needed for this partition. The `elements` of type `ArrayBuffer` will take all records of the partition from the check point. If not, the partition will be computed first, then all its records will be put into `elements`. Finally, `elements` will be submitted to `blockManager` for caching.
+เมื่อ `rdd.iterator()` ถูกเรียกใช้เพื่อประมวลผลในบางพาร์ทิชันของ `rdd` แล้ว `blockId` จะถูกใช้เพื่อกำหนดว่าพาร์ทิชันไหนจะถูกแคช เมื่อ `blockId` มีชนิดเป็น `RDDBlockId` ซึ่งจะแตกต่างกับชนิดของข้อมูลอื่นที่อยู่ใน `memoryStore` เช่น `result` ของ Task จากนั้นพาร์ทิชันใน `blockManager` จะถูกเช็คว่ามีการ Checkpoint แล้ว ถ้าเป็นเช่นนั้นแล้วเราก็จะสามารถพูดได้ว่า Task ถูกทำงานเรียบร้อยแล้วไม่ได้ต้องการทำการประมวลผลบนพาร์ทิชันนี้อีก `elements` ที่มีชนิด `ArrayBuffer` จะหยิบทุกเรคอร์ดของพาร์ทิชันมาจาก Checkpoint ถ้าไม่เป็นเช่นนั้นแล้วาร์ทิชันจะถูกประมวลผลก่อน แล้วทุกเรคอร์ดของมันจะถูกเก็บลงใน `elements` สุดท้ายแล้ว `elements` จะถูกส่งไปให้ `blockManager` เพื่อทำการแคช
 
-`blockManager` saves `elements` (partition) into `LinkedHashMap[BlockId, Entry]` inside `memoryStore`. If partition is bigger than `memoryStore`'s capacity (60% heap size), then just return by saying not being able to hold the data. If the size is ok, it will then drop some RDD partitions which was cached earlier in order to create space for the new incoming partitions. If the created space is enough, the new partition will be put into `LinkedHashMap`; if not, return by saying not enough space again. It is worth mentioning that the old partitions which belong to the RDD of the new partitions will not be dropped. Ideally, "first cached, first dropped".
+`blockManager` จะเก็บ `elements` (partition) ลงใน `LinkedHashMap[BlockId, Entry]` ที่อยู่ใน `memoryStore` ถ้าขนาดของพาร์ทิชันใหญ่กว่าขนาดของ `memoryStore` จะจุได้ (60% ของขนาด Heap) จะคืนค่าว่าไม่สามารถที่จะถือข้อมูลนี้ไว้ได้ ถ้าขนาดไม่เกินมันจะทิ้งบางพาร์ทิชันของ RDD ที่เคยแคชไว้แล้วเพื่อที่จะทำให้มีที่ว่างพอสำหรับพาร์ทิชันใหม่ที่จะเข้ามา และถ้าพื้นที่มีมากพอ พาร์ทิชันที่เข้ามาใหม่จะถูกเก็บลลงใน `LinkedHashMap` แต่ถ้ายังไม่พออีกระบบจะส่งกลับไปบอกว่าพื้นที่ว่างไม่พออีกครั้ง ข้อควรรู้สำหรับพาร์ทิชันเดิมที่ขึ้นกับ RDD ของพาร์ทิชันใหม่จะไม่ถูกทิ้ง ในอุดมคติแล้ว "first cached, first dropped"
 
-**Q: How to read cached RDD ?**
+**Q: จะอ่าน RDD ที่แคชไว้ยังไง ?**
 
-When a cached RDD is being recomputed (in next job), `task` will read `blockManager` directly from `memoryStore`. Specifically, during the computation of some RDD partitions (by calling `rdd.iterator()`), `blockManager` will be asked whether they are cached or not. If the partition is cached in local, `blockManager.getLocal()` will be called to read data from `memoryStore`. If the partition was cached on the other nodes, `blockManager.getRemote()` will be called. See below:
+เมื่อ RDD ที่ถูกแคชไว้แล้วต้องการที่จะประมวลผลใหม่อีกรอบ (ใน Job ถัดไป), Task จะอ่าน `blockManager` โดยตรงจาก `memoryStore`, เฉพาะตอนที่อยู่ระหว่างการประมวลผลของบางพาร์ทิชันของ RDD (โดยการเรียก `rdd.iterator()`) `blockManager` จะถูกเรียกถามว่ามีแคชของพาร์ทิชันหรือยัง ถ้ามีแล้วและอยู่ในโหนดโลคอลของมันเอง `blockManager.getLocal()` จะถูกเรียกเพื่ออ่านข้อมูลจาก `memoryStore` แต่ถ้าพาร์ทิชันถูกแคชบนโหนดอื่น `blockManager.getRemote()` จะถูกเรียก ดังแสดงด้านล่าง:
 
 ![cacheRead](../PNGfigures/cacheRead.png)
 
-**the storage location of cached partition:** the `blockManager` of the node on which a partition is cached will notify the `blockManagerMasterActor` on master by saying that an RDD partition is cached. This information will be stored in the `blockLocations: HashMap` of `blockMangerMasterActor`. When a task needs a cached RDD, it will send `blockManagerMaster.getLocations(blockId)` request to driver to get the partition's location, and the driver will lookup `blockLocations` to send back location info.
+**ตำแหน่งของเหล่งเก็บข้อมูลพาร์ทิชันชันที่ถูกแคช:** ตัว `blockManager` ของโหนดซึ่งพาร์ทชันถูกแคชเก็บไว้อยู่จะแจ้งไปยัง `blockManagerMasterActor` บนโหนด Master วาสพาร์ทิชันถูกแคชอยู่ซึ่งข้อมูลถูกเก็บอยู่ในรูปของ `blockLocations: HashMap` ของ `blockMangerMasterActor` เมื่อ Task ต้องการใช้ RDD ที่แคชไว้มันจะส่ง `blockManagerMaster.getLocations(blockId)` เป็นคำร้องไปยังไดรว์เวอร์เพื่อจะขอตำแหน่งของพาร์ทิชัน จกนั้นไดรว์เวอณืจะมองหาใน `blockLocations` เพื่อส่งข้อมูลตำแหน่งกลับไป
 
-**Read cached partition from the other nodes:** a task gets cached partition's location info, and then it sends `getBlock(blockId)` request to the target node via `connectionManager`. The target node retrieves and sends back the cached partition from the `memoryStore` of the local `blockManager`.
+**การพาร์ทิชันที่ถูกแคชไว้บนโหนดอื่น:** เมื่อ Task ได้รัยข้อมูลตำแหน่งของพาร์ทิชันที่ถูกแคชไว้แล้วว่าอยู่ตำแหน่งใดจากนั้นจะส่ง `getBlock(blockId)` เพื่อร้องขอไปยังโหนดปลายทางผ่าน `connectionManager` โหนดปลายทางก็จัรับและส่งกลับพาร์ทิชันที่ถูกแคชไว้แล้วจาก `memoryStore` ของ `blockManager` บนตัวมันเอง
 
 ## Checkpoint
 
-**Q: What kind of RDD needs checkpoint ?**
+**Q:  RDD ประเภทไหนที่ต้องการใช้ Checkpoint ?**
 
--	the computation takes a long time
--	the computing chain is too long
--	depends too many RDDs
+-	การประมวลผล Task ใช้เวลานาน
+-	Chain ของการประมวลผลเป็นสายยาว
+-	ขึ้นต่อหลาย RDD
 
-Actually, saving the output of `ShuffleMapTask` on local disk is also `checkpoint`, but it is just for data output of partition.
+ในความเป็นจริงแล้วการบันทึกข้อมูลเอาท์พุทจาก `ShuffleMapTask` บนโหนดโลคอลก็เป็นการ `checkpoint` แต่นั่นเป็นแต่สำหรับข้อมูลที่เป็นข้อมูลเอาท์พุทของพาร์ทิชัน
 
-**Q: When to checkpoint ?**
+**Q: เมื่อไหร่ที่จะ Checkpoint ?**
 
-As mentioned above, every time a computed partition needs to be cached, it is cached into memory. However, `checkpoint` does not follow the same principle. Instead, it waits until the end of a job, and launches another job to finish `checkpoint`. **An RDD which needs to be checkpointed will be computed twice; thus it is suggested to do a `rdd.cache()` before `rdd.checkpoint()`**. In this case, the second job will not recompute the RDD. Instead, it will just read cache. In fact, Spark offers `rdd.persist(StorageLevel.DISK_ONLY)` method, like caching on disk. Thus, it caches RDD on disk during its first computation, but this kind of `persist` and `checkpoint` are different, we will discuss the difference later.
+อย่างที่ได้พูดถึงข้างบนว่าทุกครั้งที่พาร์ทิชันที่ถูกประมวลผลแล้วต้องการที่จะแคชมันจะแคชลงไปในหน่วยความจำ แต่สำหรับ `checkpoint()` มันไม่ได้เป็นอย่างนั้น เพราะ Checkpoint ใช้วิธีรอจนกระทั่ง Job นั้นทำงานเสร็จก่อนถึงจะสร้าง Job ใหม่เพื่อมา Checkpoint **RDD mี่ต้องการ Checkpoint จะมีการประมวลผลของงานใหม่อีกครั้ง ดังนั้นจึงแนะนำให้สั่ง `rdd.cache()` เพื่อแคชข้อมูลเอาไว้ก่อนที่จะสั่ง `rdd.checkpoint()`** ในกรณีนี้งานที่ Job ที่สองจะไม่ประมวลผลซ้ำแต่จะหยิบจากที่เคยแคชไว้มาใช้ ซึ่งในความจริง Spark มีเมธอต `rdd.persist(StorageLevel.DISK_ONLY)` ให้ใช้เป็นลักษณะของการแคชลงไปบนดิสก์ (แทนหน่วยความจำ) แต่ชนิดของ `persist()` และ `checkpoint()` มีความแตกต่างกัน เราจะคุยเรื่องนี้กันทีหลัง
 
 
-**Q: How to implement checkpoint ?**
+**Q: นำ Checkpoint ไปใช้ได้อย่างไร ?**
 
-Here is the procedure:
+นี่คือขั้นตอนการนำไปใช้
 
-RDD will be: [ Initialized --> marked for checkpointing --> checkpointing in progress --> checkpointed ]. In the end, it will be checkpointed.
+RDD จะเป็น: [ เริ่มกำหนดค่า --> ทำเครื่องหมายว่าจะ Checkpoint --> ทำการ Checkpoint --> Checkpoint เสร็จ ]. ในขั้นตอนสุดท้าย RDD ก็จะถูก Checkpoint แล้ว
 
-**Initialized**
+**เริ่มกำหนดค่า**
 
-On driver side, after `rdd.checkpoint()` is called, the RDD will be managed by `RDDCheckpointData`. User should set the storage path for check point (on hdfs).
+ในฝั่งของไดรว์เวอร์หลังจากที่ `rdd.checkpoint()` ถูกเรียกแล้ว RDD จะถูกจัดการโดย `RDDCheckpointData` ผู้ใช้สามารถตั้งค่าแหล่งเก็บข้อมูลชี้ไปที่ตำแหน่งที่ต้องให้เก็บไว้ได้ เช่น บน HDFS
 
-**marked for checkpointing**
+**ทำเครื่องหมายว่าจะ Checkpoint**
 
-After initialization, `RDDCheckpointData` will mark RDD `MarkedForCheckpoint`.
+หลังจากที่เริ่มกำหนดค่า `RDDCheckpointData` จะทำเครื่องหมาย RDD เป็น `MarkedForCheckpoint`
 
-**checkpointing in progress**
+**ทำการ Checkpoint**
 
-When a job is finished, `finalRdd.doCheckpoint()` will be called. `finalRDD` scans the computing chain backward. When meeting an RDD which needs to be checkpointed, the RDD will be marked `CheckpointingInProgress`, and then the configuration files (for writing to hdfs), like core-site.xml, will be broadcast to `blockManager` of the other work nodes. After that, a job will be launched to finish `checkpoint`:
+เมื่อ Job ประมวลผลเสร็จแล้ว `finalRdd.doCheckpoint()` จะถูกเรียกใช้ `finalRdd` จำสแกน Chain ของการประมวลผลย้อนกลับไป และเมื่อพบ RDD ที่ต้องการ Checkpoint แล้ว RDD จะถูกทำเครื่องหมาย `CheckpointingInProgress` จากนั้นจะตั้งค่าไฟล์ (สำหรับเขียนไปยัง HDFS) เช่น core-site.xml จะถูก Broadcast ไปยัง `blockManager` ของโหนด Worker อื่นๆ จากนั้น Job จะถูกเรียกเพื่อทำ Checkpoint ให้สำเร็จ
 
 ```scala
 rdd.context.runJob(rdd, CheckpointRDD.writeToFile(path.toString, broadcastedConf))
 ```
 
-**checkpointed**
+**Checkpoint เสร็จ**
 
-After the job finishes checkpoint, it will clean all the dependencies of the RDD and set the RDD to checkpointed. Then, **add a supplementary dependency and set the parent RDD as `CheckpointRDD`**. The `checkpointRDD` will be used in the future to read checkpoint files from file system and then generate RDD partitions
+หลังจากที่ Job ทำงาน Checkpoint เสร็จแล้วมันจะลบความขึ้นต่อกันของ RDD และตั้งค่า RDD  ไปยัง Checkpoint จากนั้น **เพื่มการขึ้นต่อกันเสริมเข้าไปและตั้งค่าให้ RDD พ่อแม่มันเป็น `CheckpointRDD`** ตัว `CheckpointRDD` จะถูกใช้ในอนาคตเพื่อที่จะอ่านไฟล์ Checkpoint บนระบบไฟล์แล้วสร้างพาร์ทิชันของ RDD
 
-What's interesting is the following:
+อะไรคือสิ่งที่น่าสนใจ:
 
-Two `RDD`s are checkpointed in driver program, but only the `result` (see code below) is successfully checkpointed. Not sure whether it is a bug or only that the downstream RDD will be intentionally checkpointed.
+RDD สองตัวถูก Checkpoint บนโปรแกรมไดรว์เวอร์ แต่มีแค่ `result` (ในโค้ดด่านล่าง) เท่านั้นที่ Checkpoint ได้สำเร็จ ไม่แน่ใจว่าเป็น Bug หรือเพราะว่า RDD มันตามน้ำหรือจงใจให้เกิด Checkpoint กันแน่
 
 ```scala
 val data1 = Array[(Int, Char)]((1, 'a'), (2, 'b'), (3, 'c'),
@@ -116,21 +116,22 @@ val result = pairs1.join(pairs2)
 result.checkpoint
 ```
 
-**Q: How to read checkpointed RDD ?**
+**Q: จะอ่าน RDD ที่ถูก Checkpoint ไว้อย่างไร ?**
 
-`runJob()` will call `finalRDD.partitions()` to determine how many tasks there will be. `rdd.partitions()` checks if the RDD has been checkpointed via `RDDCheckpointData` which manages checkpointed RDD. If yes, return the partitions of the RDD (`Array[Partition]`). When `rdd.iterator()` is called to compute RDD's partition, `computeOrReadCheckpoint(split: Partition)` is also called to check if the RDD is checkpointed. If yes, the parent RDD's `iterator()`, a.k.a `CheckpointRDD.iterator()` will be called. `CheckpointRDD` reads files on file system to produce RDD partition. **That's why a parent `CheckpointRDD` is added to checkpointed rdd trickly.**
+`runJob()`  จะเรียกใช้ `finalRDD.partitions()` เพื่อกำหนดว่าจะมี Task เกิดขึ้นเท่าไหร่. `rdd.partitions()` จะตรวจสอบว่าถ้า RDD ถูก Checkpoint ผ่าน `RDDCheckpointData` ซึ่งจัดการ RDD ที่ถูก Checkpoint แล้ว, ถ้าใช่จะคืนค่าพาร์ทิชันของ RDD (`Array[Partition]`). เมื่อ `rdd.iterator()` ถูกเรียกใช้เพื่อประมวลผลพาร์ทิชันของ RDD, `computeOrReadCheckpoint(split: Partition)` ก็จะถูกเรียกด้วยเพื่อตรวจสอบว่า RDD ถูก Checkpoint แล้ว ถ้าใช่ `iterator()` ของ RDD พ่อแม่จะถูกเรียก (รูจักกันในชื่อ `CheckpointRDD.iterator()` จะถูกเรียก) `CheckpointRdd` จะอ่านไฟล์บนระบบไฟล์เพื่อที่จะสร้างพาร์ทิชันของ RDD **นั่นเป็นเคล็ดลับที่ว่าทำไม `CheckpointRDD` พ่อแม่จึงถูกเพิ่มเข้าไปใน RDD ที่ถูก Checkpoint ไว้แล้ว**
 
-**Q: the difference between `cache` and `checkpoint` ?**
 
-Here is the an answer from Tathagata Das:
+**Q: ข้อแตกต่างระหว่าง `cache` และ `checkpoint` ?**
 
-There is a significant difference between cache and checkpoint. Cache materializes the RDD and keeps it in memory (and/or disk). But the lineage（computing chain）of RDD (that is, seq of operations that generated the RDD) will be remembered, so that if there are node failures and parts of the cached RDDs are lost, they can be regenerated. However, **checkpoint saves the RDD to an HDFS file and actually forgets the lineage completely.** This allows long lineages to be truncated and the data to be saved reliably in HDFS, which is naturally fault tolerant by replication.
+นี่คือคำตอบที่มาจาก Tathagata Das:
 
-Furthermore, `rdd.persist(StorageLevel.DISK_ONLY)` is also different from `checkpoint`. Through the former can persist RDD partitions to disk, the partitions are managed by `blockManager`. Once driver program finishes, which means the thread where `CoarseGrainedExecutorBackend` lies in stops, `blockManager` will stop, the RDD cached to disk will be dropped (local files used by `blockManager` will be deleted). But `checkpoint` will persist RDD to HDFS or local directory. If not removed manually, they will always be on disk, so they can be used by the next driver program.
+มันมีความแตกต่างกันอย่างมากระหว่าง `cache` และ `checkpoint` เนื่องจากแคชนั้นจะสร้าง RDD และเก็บไว้ในหน่วยความจำ (และ/หรือดิสก์) แต่ Lineage (Chain ของการกระมวลผล) ของ RDD (มันคือลำดับของการดำเนินการบน RDD) จะถูกจำไว้ ดังนั้นถ้าโหนดล้มเหลวไปและทำให้บางส่วนของแคชหายไปมันสามารถที่จะคำนวณใหม่ได้ แต่อย่างไรก็ดี **Checkpoint จะบันทึกข้อมูลของ RDD ลงเป็นไฟล์ใน HDFS และจะลืม Lineage อย่างสมบูรณ์** ซึ่งอนุญาตให้ Lineage ซึ่งมีสายยาวถูกตัดและข้อมูลจะถูกบันทึกไว้ใน HDFS ซึ่งมีกลไกการทำสำเนาข้อมูลเพรื่อป้องกันการล้มเหลวตามธรรมชาติของมันอยู่แล้ว
 
-## Discussion
+นอกจากนี้ `rdd.persist(StorageLevel.DISK_ONLY)` ก็มีความแตกต่างจาก Checkpoint ลองนึกถึงว่าในอดีตเราเคย Persist พาร์ทิชันของ RDD ไปยังดิสก์แต่ว่าพาร์ทิชันของมันถูกจัดการโดย `blockManager` ซึ่งเมื่อโปรแกรมไดรว์เวอร์ที่งานเสร็จแล้ว มันหมายความว่า `CoarseGrainedExecutorBackend` ก็จะหยุดการทำงาน `blockManager` ก็จะหยุดด้วย ทำให้ RDD ที่แคชไว้บนดิสก์ถูกทิ้งไป (ไฟล์ที่ถูกใช้โดย `blockManager` จำถูกลบทิ้ง) แต่ Checkpoint สามารถ Persist RDD ไว้บน HDFS หรือโลคอลไดเรกทอรี่ ถ้าหกเราไม่ลบมือเองมันก็จะอยู่ไปในที่เก็บแบบนั้นไปเรื่อยๆ ซึ่งสามารถเรียกใช้โดยโปแกรมไดรว์เวอร์อื่นถัดไปได้
 
-When Hadoop MapReduce executes a job, it keeps persisting data (writing to HDFS) at the end of every task and every job. When executing a task, it keeps swapping between memory and disk, back and forth. The problem of Hadoop is that task needs to be re-executed if any error occurs, e.g. shuffle stopped by errors will have only half of the data persisted on disk, and then the persisted data will be recomputed for the next run of shuffle. Spark's advantage is that, when error occurs, the next run will read data from checkpoint, but the downside is that checkpoint needs to execute the job twice.
+## การพูดคุย
+
+เมื่อครั้งที่ Hadoop MapReduce ประมวลผล Job มันจะ Persist ข้อมูล (เขียนลงไปใน HDFS) ตอนท้ายของการประมวลผล Task ทุกๆ Task และทุกๆ Job เมื่อมีการประมวลผล Task จะสลับไปมาระหว่างหน่วยความจำและดิสก์. ปัญหาของ Hadoop ก็คือ Task 9้องการที่จำประมวลผลใหม่เมื่อมี Error เกิดขึ้น เช่น Shuffle ที่หยุดเมื่อ Error จะทำให้ข้อมูลที่ถูก Persist ลงบนดิสก์มีแค่ครึ่งเดียวทำให้เมื่อมีการ Shuffle ใหม่ก็ต้อง Persist ข้อมูลใหม่อีกครั้ง ซึ่ง Spark ได้เรียบในข้อนี้เนื่องจากหากเกิดการผิดพลาดขึ้นจะมีการอ่านข้อมูลจาก Checkpoint แต่ก็มีข้อเสียคือ Checkpoint ต้องการการประมวลผล Job ถึงสองครั้ง
 
 ## Example
 
