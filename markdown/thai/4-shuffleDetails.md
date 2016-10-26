@@ -189,4 +189,4 @@ The processing logic of `sortByKey()` is a little different from `reduceByKey()`
 
 So far we've discussed the shuffle process in Spark without sorting as well as how this process gets integrated into the actual execution of the RDD chain. We've also talked about memory and disk issues and compared some details with Hadoop. In the next chapter we'll try to describe job execution from an inter-process communication perspective. The shuffle data location problem will also be mentioned.
 
-เพิ่มเติมในบทนี้คือมีบล๊อคที่น่าสนใจมากๆ (เขียนในภาษาจีน) โดย Jerry Shao, [Deep Dive into Spark's shuffle implementation](http://jerryshao.me/architecture/2014/01/04/spark-shuffle-detail-investigation/).
+เพิ่มเติมในบทนี้คือมีบล๊อกที่น่าสนใจมากๆ (เขียนในภาษาจีน) โดย Jerry Shao, [Deep Dive into Spark's shuffle implementation](http://jerryshao.me/architecture/2014/01/04/spark-shuffle-detail-investigation/).
