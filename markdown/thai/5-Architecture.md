@@ -1,25 +1,25 @@
-#	Architecture
+#	สถาปัตยกรรม
 
-We talked about spark jobs in chapter 3. In this chapter, we will talk about the architecture and how master, worker, driver and executors are coordinated to finish a job.
+เราเคยคุยกันเรื่อง Spark Job กันมาแล้วในบทที่ 3 ในบทนี้เราจะคุยกันเกี่ยวกับเรื่องของ สถาปัตยกรรมและ Master, Worker, Driver, Executor ประสานงานกันอย่างไรจนกระทั้งทำงานเสร็จเรียบร้อย
 
-> Feel free to skip code if you prefer diagrams.
+>  จะดูแผนภาพโดยไม่ดูโค้ดเลยก็ได้ไม่ต้องซีเรียส
 
 
 ## Deployment diagram
 
-We have seen the following diagram in `overview` chapter.
+จากแผนภาพการดีพลอยในบทที่เป็นภาพรวม `overview` 
 
 ![deploy](../PNGfigures/deploy.png)
 
-Next, we will talk about some details about it.
+ต่อไปเราจะคุยกันถึงบางรายละเอียดเกี่ยวกับมัน
 
-## Job submission
+## การส่ง Job
 
-The diagram below illustrates how driver program (on master node) produces job, and then submits it to worker nodes.
+แผนภาพด้านล่างจะอธิบายถึงว่าโปรแกรมไดรว์เวอร์ (บนโหนด Master) สรา้ง Job และส่ง Job ไปยังโหนด Worker ได้อย่างไร?
 
 ![JobSubmission](../PNGfigures/JobSubmission.png)
 
-Driver side behavior is equivalent to the code below:
+ฝั่งไดรว์เวอร์จะมีพฤติกรรมการทำงานเหมือนกับโค้ดด้านล่างนี้
 
 ```scala
 finalRDD.action()
@@ -50,59 +50,57 @@ finalRDD.action()
       CoarseGrainedExecutorBackend(executorId) ! LaunchTask(serializedTask)
 ```
 
-Explanation:
+คำอธิบาย:
 
-When the following code is evaluated, the program will launch a bunch of driver communications, e.g. job's executors, threads, actors, etc. 
+เมื่อโค้ดด้านบนต้องการทราบค่า (มี Action) โปรแกรมไดรว์เวอร์จะมีการสื่อสารระหว่างกันเกิดขึ้นหลายตัวเป็นขบวน เช่น การประมวลผล Job, Threads, Actors เป็นต้น
 
 ```scala
 val sc = new SparkContext(sparkConf)
 ```
-
-**This line defines the role of driver**
+**บรรทัดนี้เป็นการกำหนดหน้าที่ของไดรว์เวอร์**
 
 ### Job logical plan
 
-`transformation()` in driver program builds a computing chain (a series of `RDD`). In each `RDD`:
--	`compute()` function defines the computation of records for its partitions
--	`getDependencies()` function defines the dependency relationship across RDD partitions.
+`transformation()` ในโปรแกรมไดรว์เวอร์จะสร้าง Chain การคำนวณ (ซีรีย์ของ RDD) ในแต่ละ RDD:
+- ฟังก์ชัน `compute()` กำหนดการดำเนินการคำนวณของเรคอร์ดสำหรับพาร์ทิชันของมัน
+- ฟังก์ชัน `getDependencies()` กำหนดเกี่ยวกับความสัมพันธ์ของการขึ้นต่อกันทั่วทั้งพาร์ทิชันของ RDD
 
 ### Job physical plan
 
-Each `action()` triggers a job:
--	During `dagScheduler.runJob()`, different stages are defined
--	During `submitStage()`, `ResultTasks` and `ShuffleMapTasks` needed by the stage are produced, then they are packaged in `TaskSet` and sent to `TaskScheduler`. If `TaskSet` can be executed, tasks will be submitted to `sparkDeploySchedulerBackend` which will distribute tasks.
+แต่ละ `action()` จะกระตุ้นให้เกิด Job:
+- ในระหว่างที่ `dagScheduler.runJob()` Stage จะถูกแยกและกำหนด (แยก Stage ตาม Shuffle ที่ได้อธิบายไปในบทก่อนหน้านี้แล้ว)
+- ในระหว่างที่ `submitStage()`, `ResultTasks` และ `ShuffleMapTasks` จำเป็นต้องใช้ใน Stage ที่ถูกสร้างขึ้นมา จากนั้นจะถูกห่อไว้ใน `TaskSet` และส่งไปยัง `TaskScheduler` ถ้า `TaskSet` สามารถประมวลผลได้ Task จะถูกส่งไป `sparkDeploySchedulerBackend` ซึ่งจะกระจาย Task ออกไปทำงาน
 
+### การกระจาย Task เพื่อประมวลผล
 
+หลังจากที่ `sparkDeploySchedulerBackend` ได้รับ `TaskSet` ตัว `Driver Actor` จะส่ง Task ที่ถูก Serialize แล้วส่งไป `CoarseGrainedExecutorBackend Actor` บนโหนด Worker
 
-### Task distribution
+## การรับ Job
 
-After `sparkDeploySchedulerBackend` gets `TaskSet`, the `Driver Actor` sends serialized tasks to `CoarseGrainedExecutorBackend Actor` on worker node.
-
-## Job reception
-
-After receiving tasks, worker will do the following things:
+หลังจากที่ได้รับ Task แล้วโหนด Worker จะทำงานดังนี้:
 
 ```scala
 coarseGrainedExecutorBackend ! LaunchTask(serializedTask)
 => executor.launchTask()
 => executor.threadPool.execute(new TaskRunner(taskId, serializedTask))
 ```
-**Executor packages each task into `taskRunner`, and picks a free thread to run the task. A `CoarseGrainedExecutorBackend` process has exactly one executor**
 
-## Task execution
- 
-The diagram below shows the execution of a task received by worker node and how driver processes task results.
+**Executor จะห่อแต่ละ Task เข้าไปใน `taskRunner` และเลือก Thread ที่ว่างเพื่อให้ Task ทำงาน ตัวโปรเซสของ `CoarseGrainedExecutorBackend` เป็นได้แค่หนึ่ง Executor **
+
+## การประมวลผล Task
+
+แผนภาพด้านล่างแสดงถึงการประมวลผลของ Task เมื่อ Task ถูกรับโดยโหนด Worker และไดรว์เวอร์ประมวลผล Task จนกระทั่งได้ผลลัพธ์ออกมาได้อย่างไร
 
 ![TaskExecution](../PNGfigures/taskexecution.png)
 
-After receiving a serialized task, the executor deserializes it into a normal task, and then runs the task to get `directResult` which will be sent back to driver. It is noteworthy that data package sent from `Actor` can not be too big:
+หลังจากที่ได้รับ Task ที่ถูก Serialize มาแล้ว Executor ก็จะทำการ Deserialize เพื่อแปลงกลับให้เป็น Task ปกติ และหลังจากนั้นจำสั่งให้ Task ทำงานเพื่อให้ได้ `directResult` ซึ่งจะสามารถส่งกลับไปที่ตัว Driver ได้ น่าสังเกตว่าข้อมูลที่ถูกห่อส่งมาจาก `Actor` ไม่สามารถมีขนาดใหญ่มากได้:
 
--	If the result is too big (e.g. the one of `groupByKey`), it will be persisted to "memory + hard disk" and managed by `blockManager`. Driver will only get `indirectResult` containing the storage location. When result is needed, driver will fetch it via HTTP.
--	If the result is not too big (less than `spark.akka.frameSize = 10MB`), then it will be directly sent to driver.
+- ถ้าผลลัพธ์มีขนาดใหญ่มาก (เช่น หนึ่งค่าใน `groupByKey`) มันจะถูก Persist ในหน่วยความจำและฮาร์ดดิสก์และถูกจัดการโดย `blockManager` ตัวไดรว์เวอร์จะได้เฉพาะข้อมูล `indirectResult` ซึ่งมีข้อมูลตำแหน่งของแหล่งเก็บข้อมูลอยู่ด้วย และเมื่อมีความจำเป็นต้องใช้ตัวไดรว์เวอร์ก็จะดึงผ่าน HTTP ไป
+- ถ้าผลลัพธ์ไม่ได้ใหญ่มาก (น้อยกว่า `spark.akka.frameSize = 10MB` มันจะถูกส่งโโยตรงไปที่ไดรว์เวอร์
 
-**Some more details about `blockManager`:**
+**รายละเอียดบางอย่างเพิ่มเติมสำหรับ `blockManager`:**
 
-When `directResult > akka.frameSize`, the `memoryStore` of `BlockManager` creates a `LinkedHashMap` to hold the data stored in memory whose size should be less than `Runtime.getRuntime.maxMemory * spark.storage.memoryFraction(default 0.6)`. If `LinkedHashMap` has no space to save the incoming data, these data will be sent to `diskStore` which persists data to hard disk if the data `storageLevel` contains "disk"
+เมื่อ `directResult > akka.frameSize` ตัว `memoryStorage` ของ `blockManager` จะสร้าง `LinkedHashMap` เพื่อเก็บข้อมูลที่มีขนาดน้อยกว่า `Runtime.getRuntime.maxMemory * spark.storage.memoryFraction` (ค่าเริ่มต้น 0.6) เอาไว้ในหน่วยความจำ แต่ถ้า `LinkedHashMap` ไม่เหลือพื้นที่ว่างพอสำหรับข้อมูลที่เข้ามาแล้ว ข้อมูลเหล่านั้นจะถูกส่งต่อไปยัง `diskStore` เพื่อเก็ยข้อมูลลงในฮาร์ดดิสก์(ถ้า `storageLevel` ระบุ "disk" ไว้ด้วย)
 
 ```scala
 In TaskRunner.run()
@@ -118,14 +116,13 @@ In TaskRunner.run()
 => coarseGrainedExecutorBackend.statusUpdate(result)
 => driver ! StatusUpdate(executorId, taskId, result)
 ```
-The results produced by `ShuffleMapTask` and `ResultTask` are different.
+ผลลัพธ์ที่ได้มาจากการทำงานของ `ShuffleMapTask` และ  `ResultTask` นั้นแตกต่างกัน
 
--	`ShuffleMapTask` produces `MapStatus` containing 2 parts:
-	-	the `BlockManagerId` of the task's `BlockManager`: (executorId + host, port, nettyPort）
-	-	the size of each output `FileSegment` of a task
+- `ShuffleMapTask` จะสร้าง `MapStatus` ซึ่งประกอบไปด้ว 2 ส่วนคือ:
+	- `BlockManagerId` ของ `BlockManager` ของ Task: (executorId + host, port, nettyPort）
+	- ขนาดของแต่ละเอาท์พุทของ Task (`FileSegment`)
 
--	`ResultTask` produces the execution result of the specified `function` on one partition
-	e.g. The `function` of `count()` is simply for counting the number of records in a partition. Since `ShuffleMapTask` needs `FileSegment` for writing to disk, `OutputStream` writers are needed. These writers are produced and managed by `blockManger` of `shuffleBlockManager`
+- `ResultTask` จะสร้างผลลัพธ์ของการประมวลผลโดยการเจาะจงฟังก์ชันในแต่ละพาร์ทิชัน เช่น ฟังก์ชันของ `count()` เป็นฟังก์ชันง่ายๆเพื่อนับค่าจำนวนของเรคอร์ดในพาร์ทิชันหนึ่งๆ เนื่องจากว่า `ShuffleMapTask` ต้องการใช้ `FileSegment` สำหรับเขียนข้อมูลลงดิสก์ แลเยมีความต้องการใช้ `OutputStream` ซึ่งเป็นตัวเขียนข้อมูลออก ตัวเขียนข้อมูลเหล่านี้ถูกสร้างและจัดการโดย `blockManager` ของ `shuffleBlockManager`
 
 ```scala
 In task.run(taskId)
@@ -139,13 +136,13 @@ In task.run(taskId)
 => return func(context, rdd.iterator(split, context))
 ```
 
-A series of operations will be executed after driver gets a task's result:
+ซีรีย์ของการดำเนินการข้างบนจะทำงานหลังจากที่ไดรว์เวอร์ได้รับผลลัพธของ Task มาแล้ว
 
-`TaskScheduler` will be notified that the task is finished, and its result will be processed: 
--	If it is `indirectResult`, `BlockManager.getRemotedBytes()` will be invoked to fetch actual results.
-	-	If it is `ResultTask`, `ResultHandler()` invokes driver side computation on result (e.g. `count()` take `sum` operation on all ResultTask).
-	-	If it is `MapStatus` of `ShuffleMapTask`, then `MapStatus` will be put into `mapStatuses` of `mapOutputTrackerMaster`, which makes it more easy to be queried during reduce shuffle.
--	If the received task on driver is the last task in the stage, then next stage will be submitted. If the stage is already the last one, `dagScheduler` will be informed that the job is finished.
+`TaskScheduler` จะได้รับแจ้งว่า Task นั้นเสร็จเรียบร้อยแล้วผลลัพธ์ของมันจะถูกประมวลผล:
+- ถ้ามันเป็น `indirectResult`, `BlockManager.getRemotedBytes()` จะถูกร้องขอเพื่อดึงข้อมูลจากผลลัพธ์จริงๆ
+- ถ้ามันเป็น `ResultTask`, `ResultHandler()` จะร้องขอฝั่งไดรว์เวอร์ให้เกิดการคำนวณบนผลลัพธ์ (เช่น `count()` จะใช้ `sum` ดำเนินการกับทุกๆ `ResultTask`)
+- ถ้ามันเป็น `MapStatus` ของ `ShuffleMapTask` แล้ว `MapStatus` จำสามารถเพิ่มเข้าใน `MapStatuses` ของ `MapOutputTrackerMaster` ซึ่งทำให้ง่ายกว่าในการเรียกข้อมูลในขณะที่ Reduce shuffle
+- ถ้า Task ที่รับมาบนไดรว์เวอร์เป็น Task สุดท้ายของ Stage แล้ว Stage ต่อไปจะถูกส่งไปทำงาน แต่ถ้า Stage นั้นเป็น Stage สุดท้ายแล้ว `dagScheduler` จะแจ้งว่า Job ประมวลผลเสร็จแล้ว
 
 ```scala
 After driver receives StatusUpdate(result)
@@ -177,15 +174,15 @@ After driver receives StatusUpdate(result)
 
 ## Shuffle read
 
-In the preceding paragraph, we talked about task execution and result processing, now we will talk about how reducer (tasks needs shuffle) gets the input data. The shuffle read part in last chapter has already talked about how reducer processes input data.
+ในย่อหน้าก่อนหน้านี้เราได้คุยกันถึงการทำ Task ว่าถูกประมวลผลและมีกระบวนการที่จะได้ผลลัพธ์มาอย่างไร ในตอนนี้เราจะคุยกันเรื่องว่าทำอย่างไร Reducer (Task ที่ต้องการ Shuffle) จึงจะได้รับข้อมูลอินพุท ส่วนของ Shuffle read ในท้ายบทนี้ก็ได้มีการคุยถึงกระบวนการของ Reducer ที่ทำกับข้อมูลอินพุทมาบ้างแล้ว
 
-**How does reducer know where to fetch data ?**
+**ทำอย่างไร Reducer ถึงจะรู้ว่าข้อมูลที่ต้องไปดึงอยู่ตรงไหน?**
 
 ![readMapStatus](../PNGfigures/readMapStatus.png)
 
-Reducer needs to know on which node the `FileSegments` produced by `ShuffleMapTask` of parent stage are. **This kind of information is sent to driver’s `mapOutputTrackerMaster` when `ShuffleMapTask` is finished. The information is also stored in `mapStatuses: HashMap[stageId, Array[MapStatus]]`**. Given `stageId`, we can get`Array[MapStatus]` which contains information about `FileSegments` produced by `ShuffleMapTasks`. `Array(taskId)` contains the location(`blockManagerId`) and the size of each `FileSegment`.
+Reducer ต้องการทราบว่าโหนดในที่ `FileSegment` ถูกสร้างโดย `ShuffleMapTask` ของ Stage พ่อแม่ **ประเภทของข้อมูลที่จะส่งไปไดรว์เวอร์คือ `mapOutputTrackerMaster` เมื่อ `ShuffleMapTasl` ทำงานเสร็จข้อมูลจะถูกเก็บใน `mapStatuses: HashMp[stageId,Array[MapStatus]]`** หากให้ `stageId` เราก็จะได้ `Array[MapStatus]` ออกมาซึ่งในนั้นมีข้อมูลที่เกี่ยวกับ `FileSegment` ทีี่สร้างจาก `ShuffleMapTask` บรรจุอยู่ `Array(taskId)` จะมีข้อมูลตำแหน่ง (`blockManagerId`) และขนาดของแต่ละ `FileSegment` เก็บอยู่ 
 
-When reducer need fetch input data, it will first invoke `blockStoreShuffleFetcher` to get input data’s location (`FileSegments`). `blockStoreShuffleFetcher` calls local `MapOutputTrackerWorker` to do the work. `MapOutputTrackerWorker` uses `mapOutputTrackerMasterActorRef` to communicate with `mapOutputTrackerMasterActor` in order to get `MapStatus`. `blockStoreShuffleFetcher` processes `MapStatus` and finds out where reducer should fetch `FileSegment` information, and then it stores this information in `blocksByAddress`. `blockStoreShuffleFetcher` tells `basicBlockFetcherIterator` to fetch `FileSegment` data.
+เมื่อ Reducer ต้องการดึงข้อมูลอินพุท มันจะเริ่มจากการร้องขอ `blockStoreShuffleFetcher` เพื่อขอข้อมูลตำแหน่งของ `FileSegment` ต่อมา `blockStoreShuffleFetcher` จะเรียก `MapOutputTrackerWorker` บนโหนด Worker เพื่อทำงาน ตัว `MapOutputTrackerWorker` ใช้ `mapOutputTrackerMasterActorRef` เพื่อสื่อสารกับ `mapOutputTrackerMasterActor` ตามลำดับเพื่อรับ `MapStatus` กระบวนการ `blockStoreShuffleFetcher` จะประมวลผล `MapStatus` แล้วจะพบว่าที่ Reducer ต้องไปดึงข้อมูลของ `FileSegment` จากนั้นจะเก็บข้อมูลนี้ไว้ใน `blocksByAddress`. `blockStoreShuffleFetcher` จะเป็นตัวบอกให้ `basicBlockFetcherIterator` เป็นตัวดึงข้อมูล `FileSegment`
 
 ```scala
 rdd.iterator()
@@ -201,9 +198,9 @@ rdd.iterator()
 
 ![blocksByAddress](../PNGfigures/blocksByAddress.png)
 
-After `basicBlockFetcherIterator` has received the task of data retrieving, it produces several `fetchRequest`s. **Each of them contains the tasks to fetch `FileSegment`s from several nodes. **According to the diagram above, we know that `reducer-2` needs to fetch `FileSegment`(FS)(in white) from 3 worker nodes. The global data fetching task can be represented by `blockByAddress`: 4 blocks from node 1, 3 blocks from node 2, and 4 blocks from node 3
+หลังจากที่ `basicBlockFecherIterator` ได้รับ Task ของการเรียกดูข้อมูลมันจะสร้าง `fetchRequest` **แต่ละ Request จะประกอบไปด้วย Task ที่จะดึงข้อมูล `FileSegment` จากหลายๆโหนด** ตามที่แผนภาพด้านบนแสดง เราทราบว่า `reducer-2` ต้องการดึง `FileSegment` (ย่อ: FS, แสดงด้วยสีขาว) จากโหนด Worker 3 โหนดการเข้าถึงข้อมูลระดับโกลบอลสามารถเข้าถึงและดึงข้อมูลได้ด้วย `blockByAddress`: 4 บล๊อคมาจาก `node 1`, 3 บล๊อคมาจาก `node 2` และ 4 บล๊อคมาจาก `node 3`
 
-In order to accelerate data fetching process, it makes sense to divide the global tasks into sub tasks(`fetchRequest`), then every task takes a thread to fetch data. Spark launches 5 parallel threads for each reducer (the same as Hadoop). Since the fetched data will be buffered into memory, one fetch is not able to take too much data (no more than `spark.reducer.maxMbInFlight＝48MB`). **Note that `48MB` is shared by the 5 fetch threads,** so each sub task should take no more than `48MB / 5 = 9.6MB`. In the diagram, on node 1, we have `size(FS0-2) + size(FS1-2) < 9.6MB, but size(FS0-2) + size(FS1-2) + size(FS2-2) > 9.6MB`, so we should break between `t1-r2` and `t2-r2`. As a result, we can see 2 `fetchRequest`s fetching data from node 1. **Will there be `fetchRequest` larger than 9.6MB?** The answer is yes. If one `FileSegment` is too large, it still needs to be fetched in one shot. Besides, if reducer needs some `FileSegment`s already existing on the local, it will do local read. At the end of shuffle read, it will deserialize fetched `FileSegment` and offer record iterators to `RDD.compute()`
+เพื่อที่จะเพิ่มความเร็วการดึงข้อมูลเราสามารถแบ่ง Task (`fetchRequest`) แบบโกลบอลให้เป็น Task แบบย่อยๆ ทำให้แต่ละ Task สามารถมีหลายๆ Thread เพื่อดึงข้อมูลได้ ซึ่ง Spark กำหนดค่าเริ่มต้นไว้ที่ Thread แบบขนาน 5 ตัวสำหรับแต่ละ Reducer (เท่ากับ Hadoop) เนื่องจากการดึงข้อมูลมาจะถูกบัฟเฟอร์ไว้ในหน่วยความจำดังนั้นในการดึงข้อมูลหนึ่งครั้งไม่สามารถมีขนาดได้สูงนัก (ไม่มากกว่า `spark.reducer.maxMbInFlight＝48MB`) **โปรดทราบว่า `48MB` เป็นค่าที่ใช้ร่วมกันระหว่าง 5 Thread** ดังนั้น Task ย่อยจะมีขนาดไม่เกิน `48MB / 5 = 9.6MB` จากแผนภาพ `node 1` เรามี `size(FS0-2) + size(FS1-2) < 9.6MB, แต่ size(FS0-2) + size(FS1-2) + size(FS2-2) > 9.6MB` ดังนั้นเราต้องแยกกันระหว่าง `t1-r2` และ `t2-r2` เพราพขนาดเกินจะได้ผลลัพธ์คือ 2 `fetchRequest` ที่ดึงข้อมูลมาจาก `node 1` **จะมี `fetchRequest` ที่ขนาดใหญ่กว่า 9.6MB ได้ไหม?** คำตอบคือได้ ถ้ามี `FileSegment` ที่มีขนาดใหญ่มากมันก็ยังต้องดึงด้วย Request เพียงตัวเดียว นอกจากนี้ถ้า Reducer ต้องการ `FileSegment` บางตัวที่มีอยู่แล้วในโหนดโลคอลมันก็จะอ่านที่โลคอลออกมา หลังจากจบ Shuffle read แล้วมันจะดึง `FileSegment` มา Desirialize แล้วส่งการวนซ้ำของเรคอร์ดไป `RDD.compute()`
 
 ```scala
 In basicBlockFetcherIterator:
@@ -224,16 +221,15 @@ In basicBlockFetcherIterator:
 => getLocalBlocks() 
 => fetchResults.put(new FetchResult(id, 0, () => iter))
 ```
+รายละเอียดบางส่วน:
 
-Some more details:
-
-**How does the reducer send `fetchRequest` to the target node? How does the target node process `fetchRequest`, read and send back `FileSegment` to reducer?**
+**Reducer ส่ง `fetchRequest` ไปยังโหนดที่ต้องการได้อย่างไร? โหนดปลายทางประมวลผล `fetchRequest` ได้อย่างไร? อ่านและส่งกลับ `FileSegment` ไปยัง Reducer**
 
 ![fetchrequest](../PNGfigures/fetchrequest.png)
 
-When `RDD.iterator()` meets `ShuffleDependency`, `BasicBlockFetcherIterator` will be called to fetch `FileSegment`s. `BasicBlockFetcherIterator` uses `connectionManager` of `blockManger` to send `fetchRequest` to `connectionManager`s on the other nodes. NIO is used for communication between `connectionManager`s. On the other nodes, for example, after `connectionManager` on worker node 2 receives a message, it will forward the message to `blockManager`. The latter uses `diskStore` to read `FileSegment`s requested by `fetchRequest` locally, they will still be sent back by `connectionManager`. If `FileConsolidation` is activated, `diskStore` needs the location of `blockId` given by `shuffleBolockManager`. If `FileSegment` is no more than `spark.storage.memoryMapThreshold = 8KB`, then diskStore will put `FileSegment` into memory when reading it, otherwise, The memory mapping method in `FileChannel` of `RandomAccessFile` will be used to read `FileSegment`, thus large `FileSegment` can be loaded into memory.
+เมื่อ `RDD.iterator()` เจอ `ShuffleDependency`, `BasicBlockFetcherIterator` จะถูกเรียกใช้เพื่อดึงข้อมูล `FileSegment` โดย `BasicBlockFetcherIterator` จะใช้ `connectionManager` ของ `blockManager` เพื่อส่ง `fetchRequest` ไปยัง `connectionManager` บนโหนดอื่นๆ NIO ใช้สำหรับการติดต่อสื่อสารระหว่าง `connnectionManager` บนโหนดอื่น ยกตัวอย่างโหนด Worker `node 2` จะรับข้อความแล้วส่งต่อข้อความไปยัง `blockManager` ถัดมาก็ใช้  `diskStore` อ่าน `FileSegment` ตามที่ระบุคำร้องขอไว้ใน `fetchRequest` จากนั้นก็ส่งกลับผ่าน `connectionManager` และถ้าหากว่า `FileConsolidation` ถูกกำหนดไว้ `diskStore` จะต้องการตำแหน่งของ `blockId` ที่ได้รับจาก `shuffleBolockManager` ถ้า `FileSegment` มีขนาดไม่เกิน `spark.storage.memoryMapThreshold = 8KB` แล้ว `diskStore` จะวาง `FileSegment` ไว้ในหน่วยความจำในขณะที่กำลังอ่านข้อมูลอยู่ ไม่อย่างนั้นแล้วเมธอตใน `FileChannel` ของ `RandomAccessFile` ซึ่งจะ Mapping หน่วยความจำไว้ทำให้สามารถอ่าน `FileSegment` ขนาดใหญ่เข้ามาในหน่วยความจำได้
 
-When `BasicBlockFetcherIterator` receives serialized `FileSegments` from the other nodes, it will deserialize and put them in `fetchResults.Queue`. You may notice that **`fetchResults.Queue` is similar to `softBuffer` in `Shuffle detials` chapter.** If the `FileSegment`s needed by `BasicBlockFetcherIterator` are local, they will be found locally by `diskStore`, and put in `fetchResults`. Finally, reducer reads the records from `FileSegment` and processes them.
+และเมื่อไหร่ที่ `BasicBlockFetcherIterator` ได้รับ Serialize ของ `FileSegment` จากโหนดอื่นแล้วมันจะทำการ Deserialize และส่งไปใน `fetchResults.Queue` มีข้อควรทราบอย่างหนึ่งก็คือ **`fetchResults.Queue` คล้ายกัน `softBuffer` ในรายละเอียดของบทที่เป็น Shuffle** ถ้า `FileSegment` ต้องการโดย `BasicBlockFetcherIterator` บนโหนดนั้นมันจะสามารถหาได้จาก `diskStore` ในโหนดนั้นและวางใน `fetchResult`, สุดท้ายแล้ว Reducer จะอ่านเรคอร์ดจาก `FileSegment` และประมวลผลมัน
 
 ```scala
 After the blockManager receives the fetch request
@@ -254,7 +250,7 @@ After the blockManager receives the fetch request
      channel.map(MapMode.READ_ONLY, segment.offset, segment.length)
 ```
 
-Every reducer has a `BasicBlockFetcherIterator`, and one `BasicBlockFetcherIterator` could, in theory, hold 48MB of `fetchResults`. As soon as one `FileSegment` in `fetchResults` is read off, some `FileSegment`s will be fetched to fill that 48MB.
+Reducer ทุกตัวจะมี `BasicBlockFetcherIterator` และ `BasicBlockFetcherIterator` แต่ละตัวจะสามารถถือข้อมูล `fetchResults` ได้ 48MB ในทางทฤษฏี และในขณะเดียวกัน `FileSegment` ใน `fetchResults` บางตัวอาจจะทำให้เต็ม 48MB ได้เลย
 
 ```scala
 BasicBlockFetcherIterator.next()
@@ -266,10 +262,10 @@ BasicBlockFetcherIterator.next()
 => result.deserialize()
 ```
 
-## Discussion
+## การพูดคุย
 
-In terms of architecture design, functionalities and modules are pretty independent. `BlockManager` is well designed, but it seems to manage too many things (data block, memory, disk and network communication)
+ในเรื่องของการออกแบบสถาปัตยกรรม การใช้งาน และโมดูลเป็นส่ิงที่แยกจากกันเป็นอิสระได้อย่างดี `BlockManager` ถูกออกแบบมาอย่างดี แต่มันดูเหมือนจะถูกออกแบบมาสำหรับจัดการของหลายสิ่ง (บล๊อคข้อมูล, หน่วยความจำ, ดิสก์ และการติดต่อสื่อสารกันระหว่างเครือข่าย)
 
-This chapter discussed how the modules of spark system are coordinated to finish a job (production, submission, execution, results collection, results computation and shuffle). A lot of code is pasted, many diagrams are drawn. More details can be found in source code, if you want.
+ในบทนี้คุยกันเรื่องว่าโมดูลในระบบของ Spark แต่ละส่วนติดต่อประสานงานกันอย่างไรเพื่อให้งานเสร็จ (Production, Submision, Execution, Result collection Result computation และ Shuffle) โค้ดจำนวนมากถูกวางไว้และแผนภาพจะนวนมากที่ถูกวาดขึ้น ซึ่งรายละเอียดจะแสดงในโค้ดถ้าหากต้องการดู
 
-If you also want to know more about `blockManager`, please refer to Jerry Shao's [blog](http://jerryshao.me/architecture/2013/10/08/spark-storage-module-analysis/) (in Chinese).
+รายละเอียดของ `BlockManager` สามารถอ่านเพิ่มเติมได้จากบล๊อกภาษาจีนที่ [blog](http://jerryshao.me/architecture/2013/10/08/spark-storage-module-analysis/)
