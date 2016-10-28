@@ -1,20 +1,20 @@
 ## Broadcast
 
-As its name implies, broadcast means sending data from one node to all other nodes in the cluster. It's useful in many situations, for example we have a table in the driver, and other nodes need it as a lookup table. With broadcast we can send this table to all nodes and tasks will be able to do local lookups. Actually, it is challenging to implement a broadcast mechanism that is reliable and efficient. Spark's documentation says:
+เหมือนกับชื่อมันโดยปริยายไปเลย คือ Broadcast ที่หมายถึงการส่งข้อมูลจากโหนดหนึ่งไปยังโหนดอื่นทุกโหนดในคลัสเตอร์ มันมีประโยชน์มากในหลายสถานการณ์ ยกตัวอย่างเรามีตารางหนึ่งในไดรว์เวอร์แล้วโหนดอื่นทุกโหนดต้องการที่จะอ่านค่าจากตารางนั้น ถ้าใช้ Broadcast เราจะสามารถส่งตารางไปทุกโหนด เสร็จแล้ว Task ที่ทำงานอยู่บนโหนดนั้นๆ ก็สามารถที่อ่านค่าได้ภายในโหนดโลคอลของมันเอง จริงๆ แลวกลไกนี้มันยากและท้าทายที่จะนำไปใช้อย่างมีความน่าเชื่อถือและมีประสิทธิภาพ ในเอกสารของ Spark บอกว่า:
 
-> Broadcast variables allow the programmer to keep a **read-only** variable cached on each **machine** rather than shipping a copy of it with **tasks**. They can be used, for example, to give every node a copy of a **large input dataset** in an efficient manner. Spark also attempts to distribute broadcast variables using **efficient** broadcast algorithms to reduce communication cost.
+> ตัวแปร Broadcast อนุญาตให้นักพัฒนาโปรแกรมยังคงแคชตัวแปรแบบ**อ่านอย่างเดียว (Read-only)**ไว้ในแต่ละ**เครื่อง**มากกว่าที่จะส่งมันไปกับ **Task** ยกตัวอย่างที่สามารถใช้คุณสมบัตินี้ได้ เช่น การให้ทุกๆโหนดมีสำเนาของ**เซ็ตของข้อมูลขนาดใหญ่**ในขณะที่สามารถจัดการได้อย่างมีประสิทธิภาพ Spark ก็พยายามที่จะกระจายตัวแปร Broardcast อย่างมีประสิทธิภาพโดยใช้ขั้นตอนวิธีการ Broadcast ที่มี**ประสิทธิภาพ**เพื่อลดค่าใช้จ่ายของการติดต่อสื่อสาร
 
-### Why read-only?
+### ทำไมต้อง read-only?
 
-This is a consistency problem. If a broadcasted variable can be mutated, once it's modified in some node, should we also update the copies on other nodes? If multiple nodes have updated their copies, how do we determine an order to synchronize these independent updates? There's also fault-tolerance problem coming in. To avoid all these tricky problems with data consistency, Spark only supports read-only broadcast variables.
+นี่เป็นปัญหาเรื่อง Consistency ถ้าตัวแปร Broadcast สามารถที่จะเปลี่ยนแปลงค่าหรือ Mutated ได้แล้ว ถ้ามีการเปลี่ยนแปลงที่โหนดใดโหนดหนึ่งเราจะต้องอัพเดททุกๆโหรดด้วย และถ้าหลายๆโหรดต้องการอัพเดทสำเนาของตัวแปรที่อยู่กับตัวเองหละเราะจะทำอย่างไรเพื่อที่จะทำให้มันประสานเวลากันและอัพเดทได้ย่างอิสระ? ไหนจะปัญหา Fualt-tolerance ที่จะตามมาอีก เพื่อหลีกเลี่ยงปัญหาเหล่านี้ Spark จำสนับสนุนแค่การใช้ตัวแปร Broadcast แบบอ่านอย่างเดียวเท่านั้น
 
-### Why broadcast to nodes but not tasks?
+### ทำไม Brodcast ไปที่โหนดแทนที่จะเป็น Task?
 
-Each task runs inside a thread, and all tasks in a process belong to the same Spark application. So a single read-only copy in each node (executor) can be shared by all tasks.
+เนื่องจากแต่ละ Task ทำงานภายใน Thread และทุกๆ Task ประมวลผลได้แค่กับแอพพลิเคชันของ Spark เดียวกันดังนั้นการทำสำเนา Broadcast ตัวเดียวไว้บนโหนด (Executor) สามารถแบ่งปันกันใช้ได้กับทุก Task
 
-### How to use broadcast?
+### จะใช้ Broadcast ได้อย่างไร?
 
-An example of a driver program:
+ตัวอย่างโปรแกรมไดรว์เวอร์:
 
 ```scala
 val data = List(1, 2, 3, 4, 5, 6)
@@ -24,68 +24,68 @@ val rdd = sc.parallelize(1 to 6, 2)
 val observedSizes = rdd.map(_ => bdata.value.size)
 ```
 
-Driver uses `sc.broadcast()` to declare the data to broadcast. The type of `bdata` is `Broadcast`. `rdd.transformation(func)` uses `bdata` directly inside its function like a local variable.
+ไดรว์เวอร์สามารถใช้ `sc.broadcast()` เพื่อที่จะประกาศข้อมูลที่จะถูก Broadcast จากตัวอย่างข้างบน `bdata` คือ Broadcast ตัว `rdd.transformation(func)` จะใช้ `bdata` โดยตรงภายในฟังก์ชันเหมือนกับเป็นตัวแปรโลคอลของมันเอง
 
-### How is broadcast implemented?
+### Broadcast นำไปใช้งานด้อย่างไร?
 
-The implementation behind the broadcast feature is quite interesting.
+การดำเนินงานของหลังจากการ Broadcast ไปแล้วน่าสนใจมาก
 
-#### Distribute metadata of the broadcast variable
+#### การกระจาย Metadata ของตัวแปร Broadcast
 
-Driver creates a local directory to store the data to be broadcasted and launches a `HttpServer` with access to the directory. The data is actually written into the directory when the broadcast is called (`val bdata = sc.broadcast(data)`). At the same time, the data is also written into driver's `blockManger` with a `StorageLevel` memory + disk. Block manager allocates a `blockId` (of type `BroadcastBlockId`) for the data. When a transformation function uses the broadcasted variable, the driver's `submitTask()` will serialize its metadata and send it along with the serialized function to all nodes. Akka system impose message size limits so we can not use it to broadcast the actual data.
+ไดรว์เวอร์จะสร้างโลคอลไดเรกทอรี่เพื่อที่จะเก็ยข้อมูลที่ได้มาจากการ Broadcast และเรียกใช้ `HttpServer` เพื่อเข้าใช้งานไดเรกทอรี่นี้ โดยข้อมูลจะเขียนลงไปในไดเรกเทอรี่นี้จริงๆเมื่อ Broadcast มีการเรียกใช้ (`val bdata = sc.broadcast(data)`) ในขณะเดียวกันข้อมูลก็ถูกเขียนไปที่ไดรว์เวอร์ในส่วนของ `blockManager` ด้วยโดยกำหนดระดับของ `StorageLevel` เป็นหน่วยความจำ + ดิสก์. Block Manager จะจัดสรร `blockId` (ด้วยชนิด `BroadcastBlockId`) สำหรับข้อมูลและเมื่อฟังก์ชันการแปลงใช้ตัวแปร Broadcast ตัว `submitTask()` ของไดรว์เวอร์จะ Serialize ข้อมูล Metadata ของมัน แล้วจึงส่ง Matadata ที่ Serialize พร้อมกับฟังก์ชันที่ถูก Serialize ไปทุกโหนด. ระบบ Akka มีการกำหนดขนาดของข้อความให้มีขนาดจำกัด ทำให้เราไม่สามารถที่จะส่งข้อมูลจริงๆไปได้ในการ Broadcast
 
-> Why driver put the data in both local disk directory and block manager? The copy on the local disk directory is for the HttpServer, and the copy in block manager is to facilitate the usage of this data inside the driver program.
+> ทำไมไดรว์เวอร์ต้องมีการเก็บข้อมูลไว้ทั้งในโลคอลไดเรกทอรี่และ Block manager? การที่เก็บข้อมูลไว้ในโลคอลไดเรกทอรี่ใช้สำหรับ `HttpServer` และการเก็บข้อมูลไว้ใน Block Manager นั้นสะดวกกว่าสำหรับการใช้ข้อมูลภายในโปรแกรมไดรว์เวอร์
 
-**Then when the real data is broadcasted?** When an executor deserializes the task it has received, it also gets the broadcast variable's metadata, in the form of a `Broadcast` object. It then calls the `readObject()` method of the metadata object (`bdata` variable). This method will first check the local block manager to see if there's already a local copy. If not, the data will be fetched from the driver. Once the data is fetched, it's stored in the local block manager for subsequent uses.
-
-Spark has actually 2 different implementations of the data fetching.
+**แล้วเมื่อไหร่ที่ข้อมูลจริงๆจะถูก Boardcast** เมื่อ Executor ได้ Deserialize Task ที่ได้รับมาและมันจะได้ Metadata ของตัวแปร Broadcast มาด้วยในรูปแบบของวัตถุ `Broadcast` จากนั้นแล้วจะเรียกเมธอต `readObject()` ของวัตถุ Metadata (ตัวแปร `bdata`) ในเมธอตนี้จะมีการตรวจสอบก่อนเป็นอันดับแรกว่าใน Block manager ของตัวมันเองมีสำเนาอยู่แล้วหรือเปล่า ถ้าไม่มีมันถึงจะดึงมาจากไดรว์เวอร์มาเก็บไว้ที่ Block manager สำหรับการใช้งานที่จะตามมา
+ 
+Spatk มีการดำเนินงานในการดึงข้อมูลอยู่ 2 แบบที่แตกต่างกัน
 
 #### HttpBroadcast
 
-This method fetches data through an http connection between the executor and the driver.
+วิธีการนี้จะดึงข้อมูลผ่านทางโพรโตคอลการเชื่อมต่อ HTTP ระหว่าง Executor และไดรว์เวอร์
 
-Driver creates a `HttpBroadcast` object and it's this object's job to store the broadcast data into the driver's block manager. In the same time, as we described earlier, the data is written on the local disk, for example in a directory named `/var/folders/87/grpn1_fn4xq5wdqmxk31v0l00000gp/T/spark-6233b09c-3c72-4a4d-832b-6c0791d0eb9c/broadcast_0`.
+ไดรว์เวอร์จะสร้างวัตถุของ `HttpBroadcast` ขึ้นมาเป็นเพื่อเก็บข้อมูลที่จะ Broadcast ไว้ใน Block manager ของไดรว์เวอร์ ในขณะเดียวกันข้อมูลจะถูกเขียนลงในโลคอลดิสก์ที่เป็นไดเรกทอรี่อย่างที่เคยอธิบายไว้ก่อนหน้านี้แล้ว ยกตัวอย่างชื่อของไดเรกทอรี่ เช่น `/var/folders/87/grpn1_fn4xq5wdqmxk31v0l00000gp/T/spark-6233b09c-3c72-4a4d-832b-6c0791d0eb9c/broadcast_0`
 
-> Driver and executor instantiate a `broadcastManger` object during initialization. The local directory is created by `HttpBroadcast.initialize()` method. This method also launches the http server.
+> ไดรว์เวอร์และ Executor จะสร้างวัตถุ `broadcastManager` ในระยะเริ่มต้น และไดเรกทอรี่จะถูกสร้างโดยการสั่งเมธอต `HttpBroadcast.initialize()` ซึ่งเมธอตนี้ก็จะสั่งให้ HTTP server ทำงานด้วย
 
-The actual fetching is just data transmission between two nodes with an http connection.
+การดึงข้อมูลที่เป็นข้อมูจริงๆนั้นเกิดขึ้นจากการส่งผ่านข้อมูลระหว่างโหนดสองโหนดผ่านการเชื่อมต่อแบบโปรโตคอล HTTP
 
-The problem of `HttpBroadcast` is network bandwidth bottleneck in the driver node since it sends data to all other worker nodes at the same time.
+ปัญหาก็คือ `HttpBroadcast` มีข้อจำกัดเรื่องคอขวดของเครือข่ายในโหนดที่ทำงานเป็นไดรว์เวอร์เนื่องจากมันต้องส่งข้อมูลไปยังโหนดอื่นทุกๆโหนดในเวลาเดียวกัน
 
 #### TorrentBroadcast
 
-To solve the driver network bottleneck problem in `HttpBroadcast`, Spark introduced a new broadcast implementation called `TorrentBroadcast` which is inspired by BitTorrent. The basic concept of this method is to cut the broadcast data in blocks, and executors who have already fetched data blocks can themselves be the data source.
+เพื่อที่จะแก้ปัญหาคอขวดที่เกิดกับระบบเครือข่ายของไดรว์เวอร์ใน `HttpBroadcast` ดังนั้น Spark จึงได้มีการนำเสนอวิธี Broadcast แบบใหม่ที่ชื่อว่า `TorrentBroadcast` ซึ่งได้รับแรงบัลดาลใจมาจาก BitTorrent หลักการง่ายของวิธีการนี้ก็คือจะเอาข้อมูลที่ต้องการ Broadcast หั่นเป็นบล๊อก และเมื่อ Executor ตัวไหนได้รับข้อมูลบล๊อกนั้นแล้วจะสามารถทำตัวเป็นแหล่งข้อมูลให้คนอื่นต่อได้
 
-Unlike the data transfer in `HttpBroadcast`, `TorrentBroadcast` uses `blockManager.getRemote() => NIO ConnectionManager` to do the job. The actual sending and receiving process is quite similar with the cached rdd that we've talked about in the last chapter (check last diagram in [CacheAndCheckpoint](https://github.com/JerryLead/SparkInternals/blob/master/markdown/6-CacheAndCheckpoint.md).
+ไม่เหมือนกับการโอนถ่ายข้อมูลใน `HttpBroadcast` ตัว `TorrentBroadcast` จะใช้ `blockManager.getRemote() => NIO ConnectionManager` เพื่อทำงานและการรับ-ส่งข้อมูลจริงๆจะคล้ายกันอย่างมากกับการแคช RDD ที่เราคุยจะกันในบทสุดท้ายนี้ (ดูแผนภาพใน [CacheAndCheckpoint](https://github.com/JerryLead/SparkInternals/blob/master/markdown/6-CacheAndCheckpoint.md)).
 
-Let's see some details in `TorrentBroadcast`:
+รายละเอียดบางอย่างใน `TorrentBroadcast`:
 
 ![TorrentBroadcast](../PNGfigures/TorrentBroadcast.png)
 
 #### Driver
 
-The driver serializes the data into `ByteArray` and then cut it into `BLOCK_SIZE` (defined by `spark.broadcast.blockSize = 4MB`) blocks. After the cut the original `ByteArray` will be collected but there's a temporary moment we have 2 copies of the data in memory.
+ไดรว์เวอร์จะ Serialize ข้อมูลให้อยู่ในรูปของ `ByteArray` และตัดออกจากกันตามขนาดของ `BLOCK_SIZE` (กำหนดโดย `spark.broadcast.blockSize = 4MB`) เป็นบล๊อก หลังจากที่จัด `ByteArray` แล้วตัวเดิมมันก็ยังจะค้าางอยู่ชั่วคราวดังนั้นเราจะมี 2 สำเนาของข้อมูลอยู่ในหน่วยความจำ
 
-After the cut, information about the blocks (called metadata) is stored in driver's block manager with a storage level at memory + disk. At this time, driver's `blockManagerMaster` will also be informed that the metadata is successfully stored. **This is an important step because blockManagerMaster can be accessed by all executors, meaning that block metadata has now become global data of the cluster.**
+หลังจากที่เราตัดแบ่งแล้วข้อมูลบางส่วนที่เกี่ยวกับบล๊อก (เรียกว่า Metadata) จะถูกเก็บไว้ใน Block manager ของไดรว์เวอร์ที่ระดับการเก็บเป็นหน่วยความจำ + ดิสก์ ซึ่งพอถึงตอนนี้ `blockManagerMaster` จะแจ้งว่า Metadata ถูกเก็บเรียบร้อยแล้ว **ขั้นตอนนี้สำคัญมากเนื่องจาก `blockManagerMaster` สามารถถูกเข้าถึงได้จากทุกๆ Executor นั่นหมายความว่าบล๊อกของ Metadata จะกลายเป็นข้อมูลโกลบอลของคลัสเตอร์**
 
-Driver then finishes its work by physically storing the data blocks under its block manager.
+ไดรว์เวอร์จะจบการทำงานของมันโดยเก็บบล๊อกข้แมูลที่อยู่ภายใช้ Block manager ไว้ในแหล่งเก็บข้อมูลทางกายภาพ
 
 #### Executor
 
-Upon receiving a serialized task, an executor deserializes it first. The deserialization also includes the broadcast metadata, whose type is `TorrentBroadcast`. Then its `TorrentBroadcast.readObject()` method is called. Similar to the general steps illustrated above, the local block manager will be checked first to see if some data blocks have already been fetched. If not, executor will ask driver's `blockManagerMaster` for the data block's metadata. Then the BitTorrent process starts to fetch the data blocks.
+เมื่อได้รับ Task ที่ Serialize มาแล้ว Executor จะทำการ Deserialize กลับเป็นอันดับแรกซึ่งการ Deserialize ก็รวมไปถึง Metadata ที่ Broadcast มาแล้ว ถ้ามีประเภทเป็น `TorrentBroadcast` แล้วมันจะถูกเรียกเมธอต `TorrentBroadcast.readObject()` คล้ายกับขั้นตอนที่เคยได้กล่าวถึงในด้านบน จากนั้น Block manager ที่อยู่โลคอลจะตรวจสอบดูก่อนว่ามีบล๊อกข้อมูลไหนที่ถูกดึงมาอยู่ในเครื่องอยู่แล้ว ถ้าไม่มี Executor จะถามไปที่ `blockManagerMaster` เพื่อขอ Metadata ของบล๊อกข้อมูลแล้วหลังจากนั้นกระบวน BitTorrent จึงจะถูกเริ่มเพื่อดึงบล๊อกข้อมูล
 
-**BitTorrent process:** an `arrayOfBlocks = new Array[TorrentBlock](totalBlocks)` is allocated locally to store the fetched data. `TorrentBlock` is a wrapper over a data block. The actual fetching order is randomized. For example if there's 5 blocks to fetch in total, the fetching order may be 3-1-2-4-5. Then the executor starts to fetch the data block one by one: local `blockManager` => local `connectionManager` => driver/other executor's blockManager => data. **Each fetched block is stored under local block manager and driver's `blockManagerMaster` is informed that this block has been successfully fetched.** As you'll guess, this is an important step because now all other nodes in the cluster know that there's a new data source for this block. If another node starts to fetch the same block, it'll randomly choose one data source. With more and more blocks being fetched, we'll have more data sources and the whole broadcast will be accelerated. There's a good illustration about BitTorrent on [wikipedia](http://zh.wikipedia.org/wiki/BitTorrent_(%E5%8D%8F%E8%AE%AE)).
+**กระบวนการ BitTorrent:** ตัว `arrayOfBlocks = new Array[TorrentBlock](totalBlocks)` จะถูกจัดสรรบนโลคอลโหนดเพื่อใช้เก็บข้อมูลที่ถูกดึงมา แล้ว `TorrentBlock` จะห่อบล๊อกข้อมูลไว้. ลำดับของการดึงข้อมูลนั้นจะเป็นแบบสุ่ม ยกตัวอย่าง เช่น ถ้ามี 5 บล๊อกมันอาจจะเป็น 3-1-2-4-5 ก็ได้ แล้วจากนั้น Executor จะเริ่มดึงบล๊อกข้อมูลทีละตัว: `blockManager` บนโลคอล => `connectionManager` บนโลคอล => cutor ของเครื่องอื่น => ข้อมูล.  **การดึงบล๊อกข้อมูลแต่ละครั้งจะถูกเก็บใว้ใต้ Block manager และ `blockManagerMaster` ของไดรว์เวอร์จะแจ้งว่าบล๊อกข้อมูลถูกดึงสำเร็จแล้ว** อย่างที่คิดไว้เลยก็คือขั้นตอนนี้เป็นขั้นตอนที่สำคัญเพราะว่าในตอนนี้ทุกๆโหนดในคลัสเตอร์จะรู้ว่ามีแหล่งข้อมูลที่ใหม่สำหรับบล๊อกข้อมูล ถ้าโหนดอื่นต้องการดึงบล๊อกข้อมูลเดียวกันนี้มันจะสุ่มว่าจะเลือกดึงจากที่ไหน ถ้าบล๊อกข้อมูลที่จะถูกดึงมีจำนวนมากการกระจายด้วยวิธีนี้จะช่วยให้กลไกการ Broadcast เร็วขึ้น ถ้าจะให้เห็นภาพมากขึ้นลองอ่านเรื่อง BitTorrent บน [wikipedia](http://zh.wikipedia.org/wiki/BitTorrent_(%E5%8D%8F%E8%AE%AE)).
 
-When all the data blocks are fetched locally, a big `Array[Byte]` will be allocated to reconstitute the original broadcast data from blocks. Finally this array gets deserialized and is stored under local block manager. Notice that once we have the broadcast variable in local block manager, we can safely delete the fetched data blocks (which are also stored in local block manager).
+เมื่อบล๊อกข้อมูลทุกบล๊อกถูกดึงมาไว้ที่โหนดโลคอลแล้ว `Array[Byte]` ที่มีขนาดใหญ่จะถูกจัดสรรเพื่อสร้างข้อมูลที่ Broadcast มาขึ้นมาใหม่จากบล๊อกข้อมูลย่อยๆถูกถูกดึงมา สุดท้ายแล้วอาเรย์นี้ก็จะถูก Deserialize และเก็บอยู่ภายใต้ Block manager ของโหนดโลคอล โปรดทรายว่าเมืื่อเรามีตัวแปร Broadcast ใน Block manager บนโหนดโลคอลแล้วเราสามารถลบบล๊อกของข้อมูลที่ถูกดึงมาได้อย่างปลอกภัย (ซึ่งก็ถูกเก็บอยู่ใน Block manager บนโหนดโลคอลเช่นเดียวกัน)
 
-One more question: what about broadcasting an RDD? In fact nothing bad will happen. This RDD will be evaluated in each executor so that each node has a copy of its result.
+คำถามอักอย่างหนึ่งก็คือ: แล้วเกี่ยวกับการ Broadcast RDD หล่ะ? จริงๆแล้วไม่มีอะไรแย่ๆเกิดขึ้นหรอก RDD จะถูกทราบค่าในแต่ละ Executor ดังนั้นแต่ละโหนดจะมีสำเนาผลลัพธ์ของมันเอง
 
-## Discussion
+## การพูดคุย
 
-Broadcasting shared variables is a very handy feature. In Hadoop we have the `DistributedCache` and it's used in many situations. For example, parameters of `-libjars` are sent to all nodes by using `DistributedCache`. However in Hadoop broadcasted data needs to be uploaded to HDFS first and it has no mechanism to share data between tasks in the same node. Say if some node needs to process 4 mappers coming from the same job, then the broadcast variable will be stored 4 times in this node (one copy in each mapper's working directory). An advantage of this approach is that by using HDFS we won't have the bottleneck problem since HDFS does the job of cutting data into blocks and distributing them across the cluster.
+การใช้ตัวแปร Broadcast แบ่งกันข้อมูลเป็นคุณสมบัติที่มีประโยชน์ ใน Hadoop เราจะมี `DistributedCache` ซึ่งถูกใช้งานในหลายๆสถานการณ์ เช่น พารามิเตอร์ของ `-libjars` จะถูกส่งไปยังทุกโหนดโดยการใช้ `DistributedCache` อย่างไรก็ดี Hadoop จะ Broadcast ข้อมูลโดยการอัพโหลดไปยัง HDFS ก่อนและไม่มีกลไกในการแบ่งปันข้อมูลระหว่าง Task ในโหนดเดียวกัน ถ้าบางโหนดต้องการประมวลผลโดยใช้ 4 Mapper ใน Job เดียวกันแล้วตัวแปร Broadcast จำต้องถูกเก็บ 4 ครั้งในโหนดนั้น (หนึ่งสำเนาต่อไดเรทอรี่ที่ Mapper ทำงาน) ข้อดีของวิธีการนี้คือไม่เกิดคอขวดของระบบเนื่องจาก HDFS นั้นมีการตัดส่วนของข้อมูลออกเป็นบล๊อกและกระจายตัวทั่วทั้งตลัสเตอร์อยู่แล้ว
 
-For Spark, broadcast cares about sending data to all nodes as well as letting tasks of the same node share data. Spark's block manager solves the problem of sharing data between tasks in the same node. Storing shared data in local block manager with a storage level at memory + disk guarantees that all local tasks can access the shared data, in this way we avoid storing multiple copies. Spark has 2 broadcast implementations. The traditional `HttpBroadcast` has the bottleneck problem around the driver node. `TorrentBroadcast` solves this problem but it starts slower since it only accelerate the broadcast after some amount of blocks fetched by executors. Also in Spark, the reconstitution of original data from data blocks needs some extra memory space.
+สำรับ Spark นั้น Broadcast จะใส่ใจเกี่ยวกับการส่งข้อมูลไปทุกโหนดและปล่อยให้ Task ในโหนดเดียวกันนั้นมีการแบ่งปันข้อมูลกัน ใน Spark มี Blog manager ที่จะช่วยแก้ไขปัญหาเรื่องการแบ่งปันข้อมูลระว่าง Task ในโหนดเดียวกัน การเก็บข้อมูลไว้ใน Block manager บนโหนดโลคอลโดยการใช้ระดับการเก็บข้อมูลแบบหน่วยความจำ + ดิสก์ จะรับร้องได้ว่าทุก Task บนโหนดสามารถที่จะเข้าถึงหน่วยความจำที่แบ่งปันกันนี้ได้ ซึ่งการทำแบบนี้สามารถช่วยเลี่ยงการเก็บข้อมูลที่มีความซ้ำซ้อน Spark มีการดำเนินการ Broadcast อยู่ 2 วิธีก็คือ `HttpBroadcast` ซึ่งมีคอขวดอยู่กับโหนดไดรว์เวอร์ และ `TorrentBroadcast` ซึ่งเป็นการแก้ปัญหาโดยใช้วิธีการของ BitTorrent ที่จะช้าในตอนแรกแต่เมื่อได้มัการดึงข้อมูลไปกระจายตาม Executor ตัวอื่นๆแล้วก็จะเร็วขึ้นและกระบวนการสร้างใหม่ของข้อมูลจากบล๊อกข้อมูลต้องการพื้นที่บนหน่วยความจำเพิ่มมากขึ้น
 
-In fact Spark also tried an alternative called `TreeBroadcast`. Interested reader can check the technical report: [Performance and Scalability of Broadcast in Spark](http://www.cs.berkeley.edu/~agearh/cs267.sp10/files/mosharaf-spark-bc-report-spring10.pdf).
+จริงๆแล้ว Spark มีการทดลองใช้ทางเลือกอื่นคือ `TreeBroadcast` ในรายละเอียดเชิงเทคนิคดูได้ที่: [Performance and Scalability of Broadcast in Spark](http://www.cs.berkeley.edu/~agearh/cs267.sp10/files/mosharaf-spark-bc-report-spring10.pdf).
 
-In my opinion the broadcast feature can even be implemented by using multicast protocols. But multicast is UDP based, we'll need mechanisms on reliability in the application layer.
+ในความคิดเห็นของผู้แต่งคุณสมบัติ Broadcast นี้สามารถดำเนินการโดยใช้โปรโตคอลแบบ Multicast ได้ แต่เนื่องจาก Multicast มาจากพื้นฐานของ UDP ดังนั้นเราจึงต้องการกลไกที่มีความน่าเชื่อถือในระดับแอพพลิเคชันเลเยอร์
