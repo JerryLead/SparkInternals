@@ -15,7 +15,7 @@
 
 ## การส่ง Job
 
-แผนภาพด้านล่างจะอธิบายถึงว่าโปรแกรมไดรว์เวอร์ (บนโหนด Master) สรา้ง Job และส่ง Job ไปยังโหนด Worker ได้อย่างไร?
+แผนภาพด้านล่างจะอธิบายถึงว่าโปรแกรมไดรว์เวอร์ (บนโหนด Master) สร้าง Job และส่ง Job ไปยังโหนด Worker ได้อย่างไร?
 
 ![JobSubmission](../PNGfigures/JobSubmission.png)
 
@@ -96,11 +96,11 @@ coarseGrainedExecutorBackend ! LaunchTask(serializedTask)
 หลังจากที่ได้รับ Task ที่ถูก Serialize มาแล้ว Executor ก็จะทำการ Deserialize เพื่อแปลงกลับให้เป็น Task ปกติ และหลังจากนั้นจำสั่งให้ Task ทำงานเพื่อให้ได้ `directResult` ซึ่งจะสามารถส่งกลับไปที่ตัว Driver ได้ น่าสังเกตว่าข้อมูลที่ถูกห่อส่งมาจาก `Actor` ไม่สามารถมีขนาดใหญ่มากได้:
 
 - ถ้าผลลัพธ์มีขนาดใหญ่มาก (เช่น หนึ่งค่าใน `groupByKey`) มันจะถูก Persist ในหน่วยความจำและฮาร์ดดิสก์และถูกจัดการโดย `blockManager` ตัวไดรว์เวอร์จะได้เฉพาะข้อมูล `indirectResult` ซึ่งมีข้อมูลตำแหน่งของแหล่งเก็บข้อมูลอยู่ด้วย และเมื่อมีความจำเป็นต้องใช้ตัวไดรว์เวอร์ก็จะดึงผ่าน HTTP ไป
-- ถ้าผลลัพธ์ไม่ได้ใหญ่มาก (น้อยกว่า `spark.akka.frameSize = 10MB` มันจะถูกส่งโโยตรงไปที่ไดรว์เวอร์
+- ถ้าผลลัพธ์ไม่ได้ใหญ่มาก (น้อยกว่า `spark.akka.frameSize = 10MB` มันจะถูกส่งโดยตรงไปที่ไดรว์เวอร์
 
 **รายละเอียดบางอย่างเพิ่มเติมสำหรับ `blockManager`:**
 
-เมื่อ `directResult > akka.frameSize` ตัว `memoryStorage` ของ `blockManager` จะสร้าง `LinkedHashMap` เพื่อเก็บข้อมูลที่มีขนาดน้อยกว่า `Runtime.getRuntime.maxMemory * spark.storage.memoryFraction` (ค่าเริ่มต้น 0.6) เอาไว้ในหน่วยความจำ แต่ถ้า `LinkedHashMap` ไม่เหลือพื้นที่ว่างพอสำหรับข้อมูลที่เข้ามาแล้ว ข้อมูลเหล่านั้นจะถูกส่งต่อไปยัง `diskStore` เพื่อเก็ยข้อมูลลงในฮาร์ดดิสก์(ถ้า `storageLevel` ระบุ "disk" ไว้ด้วย)
+เมื่อ `directResult > akka.frameSize` ตัว `memoryStorage` ของ `blockManager` จะสร้าง `LinkedHashMap` เพื่อเก็บข้อมูลที่มีขนาดน้อยกว่า `Runtime.getRuntime.maxMemory * spark.storage.memoryFraction` (ค่าเริ่มต้น 0.6) เอาไว้ในหน่วยความจำ แต่ถ้า `LinkedHashMap` ไม่เหลือพื้นที่ว่างพอสำหรับข้อมูลที่เข้ามาแล้ว ข้อมูลเหล่านั้นจะถูกส่งต่อไปยัง `diskStore` เพื่อเก็บข้อมูลลงในฮาร์ดดิสก์(ถ้า `storageLevel` ระบุ "disk" ไว้ด้วย)
 
 ```scala
 In TaskRunner.run()
@@ -200,7 +200,7 @@ rdd.iterator()
 
 หลังจากที่ `basicBlockFecherIterator` ได้รับ Task ของการเรียกดูข้อมูลมันจะสร้าง `fetchRequest` **แต่ละ Request จะประกอบไปด้วย Task ที่จะดึงข้อมูล `FileSegment` จากหลายๆโหนด** ตามที่แผนภาพด้านบนแสดง เราทราบว่า `reducer-2` ต้องการดึง `FileSegment` (ย่อ: FS, แสดงด้วยสีขาว) จากโหนด Worker 3 โหนดการเข้าถึงข้อมูลระดับโกลบอลสามารถเข้าถึงและดึงข้อมูลได้ด้วย `blockByAddress`: 4 บล๊อคมาจาก `node 1`, 3 บล๊อคมาจาก `node 2` และ 4 บล๊อคมาจาก `node 3`
 
-เพื่อที่จะเพิ่มความเร็วการดึงข้อมูลเราสามารถแบ่ง Task (`fetchRequest`) แบบโกลบอลให้เป็น Task แบบย่อยๆ ทำให้แต่ละ Task สามารถมีหลายๆ Thread เพื่อดึงข้อมูลได้ ซึ่ง Spark กำหนดค่าเริ่มต้นไว้ที่ Thread แบบขนาน 5 ตัวสำหรับแต่ละ Reducer (เท่ากับ Hadoop) เนื่องจากการดึงข้อมูลมาจะถูกบัฟเฟอร์ไว้ในหน่วยความจำดังนั้นในการดึงข้อมูลหนึ่งครั้งไม่สามารถมีขนาดได้สูงนัก (ไม่มากกว่า `spark.reducer.maxMbInFlight＝48MB`) **โปรดทราบว่า `48MB` เป็นค่าที่ใช้ร่วมกันระหว่าง 5 Thread** ดังนั้น Task ย่อยจะมีขนาดไม่เกิน `48MB / 5 = 9.6MB` จากแผนภาพ `node 1` เรามี `size(FS0-2) + size(FS1-2) < 9.6MB, แต่ size(FS0-2) + size(FS1-2) + size(FS2-2) > 9.6MB` ดังนั้นเราต้องแยกกันระหว่าง `t1-r2` และ `t2-r2` เพราพขนาดเกินจะได้ผลลัพธ์คือ 2 `fetchRequest` ที่ดึงข้อมูลมาจาก `node 1` **จะมี `fetchRequest` ที่ขนาดใหญ่กว่า 9.6MB ได้ไหม?** คำตอบคือได้ ถ้ามี `FileSegment` ที่มีขนาดใหญ่มากมันก็ยังต้องดึงด้วย Request เพียงตัวเดียว นอกจากนี้ถ้า Reducer ต้องการ `FileSegment` บางตัวที่มีอยู่แล้วในโหนดโลคอลมันก็จะอ่านที่โลคอลออกมา หลังจากจบ Shuffle read แล้วมันจะดึง `FileSegment` มา Desirialize แล้วส่งการวนซ้ำของเรคอร์ดไป `RDD.compute()`
+เพื่อที่จะเพิ่มความเร็วการดึงข้อมูลเราสามารถแบ่ง Task (`fetchRequest`) แบบโกลบอลให้เป็น Task แบบย่อยๆ ทำให้แต่ละ Task สามารถมีหลายๆ Thread เพื่อดึงข้อมูลได้ ซึ่ง Spark กำหนดค่าเริ่มต้นไว้ที่ Thread แบบขนาน 5 ตัวสำหรับแต่ละ Reducer (เท่ากับ Hadoop) เนื่องจากการดึงข้อมูลมาจะถูกบัฟเฟอร์ไว้ในหน่วยความจำดังนั้นในการดึงข้อมูลหนึ่งครั้งไม่สามารถมีขนาดได้สูงนัก (ไม่มากกว่า `spark.reducer.maxMbInFlight＝48MB`) **โปรดทราบว่า `48MB` เป็นค่าที่ใช้ร่วมกันระหว่าง 5 Thread** ดังนั้น Task ย่อยจะมีขนาดไม่เกิน `48MB / 5 = 9.6MB` จากแผนภาพ `node 1` เรามี `size(FS0-2) + size(FS1-2) < 9.6MB, แต่ size(FS0-2) + size(FS1-2) + size(FS2-2) > 9.6MB` ดังนั้นเราต้องแยกกันระหว่าง `t1-r2` และ `t2-r2` เพราพขนาดเกินจะได้ผลลัพธ์คือ 2 `fetchRequest` ที่ดึงข้อมูลมาจาก `node 1` **จะมี `fetchRequest` ที่ขนาดใหญ่กว่า 9.6MB ได้ไหม?** คำตอบคือได้ ถ้ามี `FileSegment` ที่มีขนาดใหญ่มากมันก็ยังต้องดึงด้วย Request เพียงตัวเดียว นอกจากนี้ถ้า Reducer ต้องการ `FileSegment` บางตัวที่มีอยู่แล้วในโหนดโลคอลมันก็จะอ่านที่โลคอลออกมา หลังจากจบ Shuffle read แล้วมันจะดึง `FileSegment` มา Deserialize แล้วส่งการวนซ้ำของเรคอร์ดไป `RDD.compute()`
 
 ```scala
 In basicBlockFetcherIterator:
@@ -268,4 +268,4 @@ BasicBlockFetcherIterator.next()
 
 ในบทนี้คุยกันเรื่องว่าโมดูลในระบบของ Spark แต่ละส่วนติดต่อประสานงานกันอย่างไรเพื่อให้งานเสร็จ (Production, Submision, Execution, Result collection Result computation และ Shuffle) โค้ดจำนวนมากถูกวางไว้และแผนภาพจะนวนมากที่ถูกวาดขึ้น ซึ่งรายละเอียดจะแสดงในโค้ดถ้าหากต้องการดู
 
-รายละเอียดของ `BlockManager` สามารถอ่านเพิ่มเติมได้จากบล๊อกภาษาจีนที่ [blog](http://jerryshao.me/architecture/2013/10/08/spark-storage-module-analysis/)
+รายละเอียดของ `BlockManager` สามารถอ่านเพิ่มเติมได้จากบล๊อคภาษาจีนที่ [blog](http://jerryshao.me/architecture/2013/10/08/spark-storage-module-analysis/)
