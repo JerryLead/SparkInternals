@@ -9,6 +9,7 @@ Doc Version: 1.0.2.0
 |[@JerryLead](http://weibo.com/jerrylead) | Lijie Xu | Author of the original Chinese version, and English version update |
 |[@juhanlol](https://twitter.com/juhanlol) | Han JU | English version and update (Chapter 0, 1, 3, 4, and 7) |
 |[@invkrh](https://twitter.com/invkrh) | Hao Ren | English version and update (Chapter 2, 5, and 6)|
+|[@AorJoa](https://twitter.com/AorJoa) | Bhuridech Sudsee | Thai version |
 
 ## Introduction
 
@@ -37,7 +38,12 @@ We start from the creation of a Spark job, and then discuss its execution. Final
 8. Job Scheduling TODO
 9. Fault-tolerance TODO
 
-Chinses Verison is at markdown/.
+## Other languages
+
+Chinses Verison is at [markdown/](https://github.com/JerryLead/SparkInternals/tree/master/markdown).
+Thai Version is at [markdown/thai](https://github.com/JerryLead/SparkInternals/tree/master/markdown/thai)
+
+## How to read this document
 
 The documentation is written in markdown. The pdf version is also available [here](https://github.com/JerryLead/SparkInternals/tree/master/pdf).
 
