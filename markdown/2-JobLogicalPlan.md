@@ -134,11 +134,11 @@ val pairs = sc.parallelize(List(1, 2, 3, 4, 5), 3)
 生成的 pairs 就是 ParallelCollectionRDD。  
 
 
-**2) reduceyByKey(func, numPartitions)**
+**2) reduceByKey(func, numPartitions)**
 
-![reduceyByKey](PNGfigures/reduceByKey.png)
+![reduceByKey](PNGfigures/reduceByKey.png)
 
-reduceyByKey() 相当于传统的 MapReduce，整个数据流也与 Hadoop 中的数据流基本一样。reduceyByKey() 默认在 map 端开启 combine()，因此在 shuffle 之前先通过 mapPartitions 操作进行 combine，得到 MapPartitionsRDD，然后 shuffle 得到 ShuffledRDD，然后再进行 reduce（通过 aggregate + mapPartitions() 操作来实现）得到 MapPartitionsRDD。
+reduceByKey() 相当于传统的 MapReduce，整个数据流也与 Hadoop 中的数据流基本一样。reduceByKey() 默认在 map 端开启 combine()，因此在 shuffle 之前先通过 mapPartitions 操作进行 combine，得到 MapPartitionsRDD，然后 shuffle 得到 ShuffledRDD，然后再进行 reduce（通过 aggregate + mapPartitions() 操作来实现）得到 MapPartitionsRDD。
 
 **3) distinct(numPartitions)**
 
