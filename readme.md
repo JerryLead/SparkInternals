@@ -15,7 +15,7 @@ Doc Version: 1.0.2.0
 
 This series discuss the design and implementation of Apache Spark, with focuses on its design principles, execution mechanisms, system architecture and performance optimization. In addition, there's some comparisons with Hadoop MapReduce in terms of design and implementation. I'm reluctant to call this document a "code walkthrough", because the goal is not to analyze each piece of code in the project, but to understand the whole system in a systematic way (through analyzing the execution procedure of a Spark job, from its creation to completion).
 
-There're many ways to discuss a computer system. Here, We've chosen a **problem-driven** approach.  Firstly one concret problem is introduced, then it gets analyzed step by step. We'll start from a typical Spark example job and then discuss all the related important system modules. I believe that this approach is better than diving into each module right from the beginning.
+There're many ways to discuss a computer system. Here, We've chosen a **problem-driven** approach.  Firstly one concrete problem is introduced, then it gets analyzed step by step. We'll start from a typical Spark example job and then discuss all the related important system modules. I believe that this approach is better than diving into each module right from the beginning.
 
 The target audiences of this series are geeks who want to have a deeper understanding of Apache Spark as well as other distributed computing frameworks.
 
@@ -40,14 +40,14 @@ We start from the creation of a Spark job, and then discuss its execution. Final
 
 ## Other languages
 
-Chinses Verison is at [markdown/](https://github.com/JerryLead/SparkInternals/tree/master/markdown).
+Chinese Version is at [markdown/](https://github.com/JerryLead/SparkInternals/tree/master/markdown).
 Thai Version is at [markdown/thai](https://github.com/JerryLead/SparkInternals/tree/master/markdown/thai)
 
 ## How to read this document
 
 The documentation is written in markdown. The pdf version is also available [here](https://github.com/JerryLead/SparkInternals/tree/master/pdf).
 
-If you're under Max OS X, I recommand [MacDown](http://macdown.uranusjr.com/) with a github theme for reading.
+If you're under Mac OS X, I recommand [MacDown](http://macdown.uranusjr.com/) with a github theme for reading.
 
 ## Gitbook (Chinese version)
 
