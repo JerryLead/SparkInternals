@@ -18,7 +18,7 @@ We can see from the deployment diagram (Standalone version):
     ```scala
 	./bin/run-example SparkPi 10
 	```
-	The SparkPi program will become the Driver (on the Master node). However, if the driver program is submmited to a YARN cluster, the Driver may be scheduled to a Worker node (e.g., Worker node 2 in the diagram). If the driver program is launched on a local PC, such as running the following prgram in IntelliJ IDEA:
+	The SparkPi program will become the Driver (on the Master node). However, if the driver program is submitted to a YARN cluster, the Driver may be scheduled to a Worker node (e.g., Worker node 2 in the diagram). If the driver program is launched on a local PC, such as running the following program in IntelliJ IDEA:
 
 	```scala
 	val sc = new SparkContext("spark://master:7077", "AppName")
@@ -98,7 +98,7 @@ Since this is a simple application, let's estimate the runtime data size in each
   1. Initialize SparkConf.
   2. Initialize `numMappers=100`, `numKVPairs=10,000`, `valSize=1000`, `numReducers= 36`.
   3. Initialize SparkContext, which creates the necessary objects and actors for the driver.
-  4. Each mapper creats an `arr1: Array[(Int, Byte[])]`, which has `numKVPairs` elements. Each  `Int` is a random integer, and each byte array's size is `valSize`. We can estimate `Size(arr1) = numKVPairs * (4 + valSize) = 10MB`, so that `Size(pairs1) = numMappers * Size(arr1) ＝1000MB`.
+  4. Each mapper creates an `arr1: Array[(Int, Byte[])]`, which has `numKVPairs` elements. Each  `Int` is a random integer, and each byte array's size is `valSize`. We can estimate `Size(arr1) = numKVPairs * (4 + valSize) = 10MB`, so that `Size(pairs1) = numMappers * Size(arr1) ＝1000MB`.
   5. Each mapper is instructed to cache its `arr1` array into the memory.
   6. The action count() is applied to sum the number of elements in  `arr1` in all mappers, the result is `numMappers * numKVPairs = 1,000,000`. This action triggers the caching of `arr1`s.
   7. `groupByKey` operation is performed on cached `pairs1`. The reducer number (a.k.a., partition number) is `numReducers`. Theoretically, if hash(key) is evenly distributed, each reducer will receive `numMappers * numKVPairs / numReducer ＝ 27,777` pairs of `(Int, Array[Byte])`, with a size of `Size(pairs1) / numReducer = 27MB`.
@@ -107,7 +107,7 @@ Since this is a simple application, let's estimate the runtime data size in each
 
 ## Logical Plan
 
-The actual execution procedure is more complicated than what we descrbed above. Generally speaking, Spark firstly creates a logical plan (namely data dependency graph) for each application, then it transforms the logical plan into a physical plan (a DAG graph of map/reduce stages and map/reduce tasks). After that, concrete map/reduce tasks will be lanuched to process the input data. Let's detail the logical plan of this application:
+The actual execution procedure is more complicated than what we described above. Generally speaking, Spark firstly creates a logical plan (namely data dependency graph) for each application, then it transforms the logical plan into a physical plan (a DAG graph of map/reduce stages and map/reduce tasks). After that, concrete map/reduce tasks will be lanuched to process the input data. Let's detail the logical plan of this application:
 
 The function call of `RDD.toDebugString` can return the logical plan:
 
