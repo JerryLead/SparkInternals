@@ -151,7 +151,7 @@ We have talked about `groupByKey`'s dependency before, now we make it more clear
 
 ![reduceyByKey](../PNGfigures/reduceByKey.png)
 
-`reduceByKey()` is similar to `reduce()` in MapReduce. The data flow is equivalent. `redcuceByKey` enables map-side combine by default, which is carried out by `mapPartitions()` before shuffle and results in `MapPartitionsRDD`. After shuffle, `aggregate + mapPartitions()` is applied to `ShuffledRDD`. Again, we get a `MapPartitionsRDD`.
+`reduceByKey()` is similar to `reduce()` in MapReduce. The data flow is equivalent. `reduceByKey` enables map-side combine by default, which is carried out by `mapPartitions()` before shuffle and results in `MapPartitionsRDD`. After shuffle, `aggregate + mapPartitions()` is applied to `ShuffledRDD`. Again, we get a `MapPartitionsRDD`.
 
 **3) distinct(numPartitions)**
 
