@@ -244,7 +244,7 @@ To understand `coalesce()`, we need to know **the relationship between `Coalesce
 	-	for each partition, every record is assigned a key which is an increasing number.
 	-	hash(key) leads to a uniform records distribution on all different partitions.
 
-	In the second example, every record in `RDD a` is combined with a increasing key (on the left side of the pair). The key of the first record in each partition is equal to `(new Random(index)).nextInt(numPartitions)`, where `index` is the index of the partition and `numPartitions` is the # of partitions in `CoalescedRDD`. The following keys increase by 1. After shuffle, the records in `ShffledRDD` are uniformly distributed. The relationship between `ShuffledRDD` and `CoalescedRDD` is defined a complicated algorithm. In the end, keys are removed (`MappedRDD`).
+	In the second example, every record in `RDD a` is combined with a increasing key (on the left side of the pair). The key of the first record in each partition is equal to `(new Random(index)).nextInt(numPartitions)`, where `index` is the index of the partition and `numPartitions` is the # of partitions in `CoalescedRDD`. The following keys increase by 1. After shuffle, the records in `ShuffledRDD` are uniformly distributed. The relationship between `ShuffledRDD` and `CoalescedRDD` is defined a complicated algorithm. In the end, keys are removed (`MappedRDD`).
 
 **10) repartition(numPartitions)**
 
