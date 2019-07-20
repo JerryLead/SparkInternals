@@ -106,7 +106,7 @@ To reduce network trafic between nodes, we could use map side `combine()` in Had
 
 ![ShuffleGroupByKey](../PNGfigures/ShuffleGroupByKey.png)
 
-The process is similar to that of `reduceByKey()`. The `func` becomes `result = result ++ result.value`. This means that each key's values are grouped together without further aggregation.
+The process is similar to that of `reduceByKey()`. The `func` becomes `result = result ++ record.value`. This means that each key's values are grouped together without further aggregation.
 
 ### `distinct(numPartitions)`
 
