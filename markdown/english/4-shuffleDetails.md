@@ -182,4 +182,4 @@ As we've seen in this chapter, Spark is way more flexible in the shuffle process
 
 So far we've discussed the shuffle process in Spark without sorting as well as how this process gets integrated into the actual execution of the RDD chain. We've also talked about memory and disk issues and compared some details with Hadoop. In the next chapter we'll try to describe job execution from an inter-process communication perspective. The shuffle data location problem will also be mentioned.
 
-Plus to this chapter, thers's the outstanding blog (in Chinese) by Jerry Shao, [Deep Dive into Spark's shuffle implementation](http://jerryshao.me/architecture/2014/01/04/spark-shuffle-detail-investigation/).
+Plus to this chapter, thers's the outstanding blog (in Chinese) by Jerry Shao, [Deep Dive into Spark's shuffle implementation](http://jerryshao.me/2014/01/04/spark-shuffle-detail-investigation/).
