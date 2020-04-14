@@ -11,15 +11,15 @@ We can see from the diagram:
   - Worker node has a Worker daemon process, responsible for communicating with the master node and for managing local executors
   - In the official document, the Driver is explained as "The process running the main() function of the application and creating the SparkContext". The application is the user's program (driver program), such as WordCount.scala. If the driver program is running on the Master node, for example if we run the this on the Master node
 
-    ```scala
-	./bin/run-example SparkPi 10
-	```
-	Then the SparkPi program will be the Driver on the Master node. In case of a YARN cluster, the Driver may be scheduled to a Worker node (for example Worker node 2 in the diagram). If the driver program is run on a local PC, such as running from within Eclipse with
+```scala
+./bin/run-example SparkPi 10
+```
+Then the SparkPi program will be the Driver on the Master node. In case of a YARN cluster, the Driver may be scheduled to a Worker node (for example Worker node 2 in the diagram). If the driver program is run on a local PC, such as running from within Eclipse with
 
-	```scala
-	val sc = new SparkContext("spark://master:7077", "AppName")
-	```
-   Then the driver program will be on the local machine. However this is not a recommended way of running Spark since the local machine may not be in the same network with the Worker nodes, which will slow down the communication between the driver and the executors
+```scala
+val sc = new SparkContext("spark://master:7077", "AppName")
+```
+Then the driver program will be on the local machine. However this is not a recommended way of running Spark since the local machine may not be in the same network with the Worker nodes, which will slow down the communication between the driver and the executors
 
   - There may have one or multiple ExecutorBackend processes in each Worker node, each one possesses an Executor instance. Each Executor object maintains a thread pool. Each task runs on a thread.
   - Each application has one driver and multiple executors. All tasks within the same executor belongs to the same application
