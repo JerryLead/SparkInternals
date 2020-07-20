@@ -1,3 +1,14 @@
+## 新书 (NEW BOOK)
+拖拖拉拉写了很久的书《大数据处理框架Apache Spark设计与实现》终于出版了。书的内容是以Apache Spark为主，系统总结了大数据处理框架的一些基本问题、设计原理、实现方案、以及性能和可靠性。相比SparkInternals，内容更完善专业深入。感谢孙学瑛编辑及团队的付出、感谢朋友们提出的审阅意见、以及实验室和亲朋好友的大力支持！大数据处理框架发展很快，还有很多优美匠心的设计和实现方案，本书抛砖引玉，期待有更多的朋友把这些知识总结展示出来。
+
+京东链接：https://item.jd.com/12924768.html
+
+书的封面:
+![book cover](https://raw.githubusercontent.com/JerryLead/ApacheSparkBook/master/figures/%E5%B0%81%E9%9D%A2/%E5%B0%81%E9%9D%A2.jpeg)
+
+书的前言：https://github.com/JerryLead/ApacheSparkBook/blob/master/Preface.pdf
+
+
 # Spark Internals
 
 Spark Version: 1.0.2  
