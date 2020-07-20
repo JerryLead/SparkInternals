@@ -64,6 +64,17 @@ Downloads
 ## Examples
 I've created some examples to debug the system during the writing, they are avaible under [SparkLearning/src/internals](https://github.com/JerryLead/SparkLearning/tree/master/src/internals).
 
+
+## Book version (NEW)
+We have written a book named "The design principles and implementation of Apache Spark", which talks about the system problems, design principles, and implementation strategies of Apache Spark, and also details the shuffle, fault-tolerant, and memory management mechanisms. Currently, it is written in Chinese.
+
+Book link: https://item.jd.com/12924768.html
+
+Book cover:
+![book cover](https://raw.githubusercontent.com/JerryLead/ApacheSparkBook/master/figures/%E5%B0%81%E9%9D%A2/%E5%B0%81%E9%9D%A2.jpeg)
+
+Book preface: https://github.com/JerryLead/ApacheSparkBook/blob/master/Preface.pdf
+
 ## Acknowledgement
 
 I appreciate the help from the following in providing solutions and ideas for some detailed issues:
