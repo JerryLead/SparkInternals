@@ -21,7 +21,7 @@ The target audiences of this series are geeks who want to have a deeper understa
 
 I'll try my best to keep this documentation up to date with Spark since it's a fast evolving project with an active community. The documentation's main version is in sync with Spark's version. The additional number at the end represents the documentation's update version.
 
-For more academic oriented discussion, please check out Matei's PHD thesis and other related papers. You can also have a look at my blog (in Chinese) [blog](http://www.cnblogs.com/jerrylead/archive/2013/04/27/Spark.html).
+For more academic oriented discussion, please check out Matei's PHD thesis and other related papers. You can also have a look at my [blog](http://www.cnblogs.com/jerrylead/archive/2013/04/27/Spark.html) (in Chinese).
 
 I haven't been writing such complete documentation for a while. Last time it was about three years ago when I was studying Andrew Ng's ML course. I was really motivated at that time! This time I've spent 20+ days on this document, from the summer break till now (August 2014). Most of the time is spent on debugging, drawing diagrams and thinking how to put my ideas in the right way. I hope you find this series helpful.
 
