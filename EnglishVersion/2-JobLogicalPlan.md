@@ -183,9 +183,9 @@ Then,
 ```
 Foreach rdd = rdds(i):
 	if the dependency between CoGroupedRDD and rdd is OneToOneDependency
-		Dependecy[i] = new OneToOneDependency(rdd)
+		Dependency[i] = new OneToOneDependency(rdd)
 	else
-		Dependecy[i] = new ShuffleDependency(rdd)
+		Dependency[i] = new ShuffleDependency(rdd)
 ```
 
 Finally, it returns `deps: Array[Dependency]`, which is an array of `Dependency` corresponding to each parent RDD.
@@ -198,7 +198,7 @@ Finally, it returns `deps: Array[Dependency]`, which is an array of `Dependency`
 
 ![intersection](../PNGfigures/intersection.png)
 
-`intersection()` aims to extract all the common elements from  `RDD a` and `RDD b`. `RDD[T]` is mapped into `RDD[(T,null)]`, where `T` cannot be any collections. Then, `a.cogroup(b)` (colored in blue) is performed. Next, `filter()` only keeps the records where neither of `[iter(groupA()), iter(groupB())]` is empty (`FilteredRDD`). Finally, only keys of the reocrds are kept in `MappedRDD`.
+`intersection()` aims to extract all the common elements from  `RDD a` and `RDD b`. `RDD[T]` is mapped into `RDD[(T,null)]`, where `T` cannot be any collections. Then, `a.cogroup(b)` (colored in blue) is performed. Next, `filter()` only keeps the records where neither of `[iter(groupA()), iter(groupB())]` is empty (`FilteredRDD`). Finally, only keys of the records are kept in `MappedRDD`.
 
 6) **join(otherRDD, numPartitions)**
 
